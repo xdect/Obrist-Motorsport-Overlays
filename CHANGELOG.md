@@ -3,6 +3,11 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.3.1
+
+- Behoben: Ein Update konnte die installierte Version beschädigen, sodass OM Overlays nicht mehr startete
+- Updates tauschen die Version jetzt erst aus, wenn die neue vollständig bereitliegt; bei Problemen bleibt die bisherige lauffähig
+
 ## 1.3.0
 
 - Mehrere Spiel-Layouts anlegen, benennen, duplizieren und löschen

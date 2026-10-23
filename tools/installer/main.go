@@ -146,6 +146,46 @@ func extract(dst string) error {
 	return nil
 }
 
+// replaceInstall packt die neue Version neben der alten aus und tauscht erst danach.
+// Schlägt etwas fehl, bleibt die bisherige Version unverändert und lauffähig.
+func replaceInstall(dir string) error {
+	newDir, oldDir := dir+".neu", dir+".alt"
+	os.RemoveAll(newDir)
+	os.RemoveAll(oldDir) // Reste eines früheren Versuchs
+	if err := extract(newDir); err != nil {
+		os.RemoveAll(newDir)
+		return fmt.Errorf("Entpacken fehlgeschlagen: %w", err)
+	}
+	if err := copySelf(filepath.Join(newDir, uninstName)); err != nil {
+		os.RemoveAll(newDir)
+		return err
+	}
+	if _, err := os.Stat(dir); err == nil {
+		// Bis zu 15 s warten, bis Windows die Dateien der beendeten App freigibt
+		var rerr error
+		for i := 0; i < 30; i++ {
+			if rerr = os.Rename(dir, oldDir); rerr == nil {
+				break
+			}
+			if i == 6 || i == 18 {
+				stopRunning()
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		if rerr != nil {
+			os.RemoveAll(newDir)
+			return fmt.Errorf("die bisherige Version ist noch in Benutzung und bleibt unverändert installiert (%v)", rerr)
+		}
+	}
+	if err := os.Rename(newDir, dir); err != nil {
+		os.Rename(oldDir, dir) // alte Version zurück
+		os.RemoveAll(newDir)
+		return fmt.Errorf("neue Version konnte nicht an ihren Platz: %w", err)
+	}
+	os.RemoveAll(oldDir) // was jetzt nicht geht, räumt die nächste Installation auf
+	return nil
+}
+
 func dirSizeKB(dir string) int64 {
 	var total int64
 	filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
@@ -193,13 +233,7 @@ func install(update bool, restartArgs []string) {
 	done := make(chan error, 1)
 	go func() {
 		err := func() error {
-			if err := os.RemoveAll(dir); err != nil {
-				return fmt.Errorf("alte Version konnte nicht entfernt werden: %w", err)
-			}
-			if err := extract(dir); err != nil {
-				return err
-			}
-			return copySelf(filepath.Join(dir, uninstName))
+			return replaceInstall(dir)
 		}()
 		cap16, _ := syscall.UTF16PtrFromString(busyCaption)
 		for i := 0; i < 60 && !boxClosed.Load(); i++ {
@@ -219,7 +253,7 @@ func install(update bool, restartArgs []string) {
 	boxClosed.Store(true)
 	runtime.UnlockOSThread()
 	if err := <-done; err != nil {
-		fail("Installation fehlgeschlagen:\n\n%v\n\nBitte OM Overlays beenden und das Setup erneut starten.", err)
+		fail("Installation fehlgeschlagen:\n\n%v\n\nBitte OM Overlays beenden (Symbol im Infobereich → Beenden) und das Setup erneut starten.", err)
 	}
 
 	exe := filepath.Join(dir, exeName)
@@ -286,15 +320,20 @@ Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('Desktop')) %s
 	// Das laufende Deinstallationsprogramm liegt im Ordner selbst → Löschen kurz verzögert.
 	// cmd.exe versteht Go's Argument-Escaping nicht → Kommandozeile roh übergeben.
 	cmd := exec.Command("cmd.exe")
+	cmd.Dir = os.TempDir() // nicht im Ordner stehen, der gelöscht werden soll
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: createNoWin | detached,
-		CmdLine:       fmt.Sprintf(`cmd.exe /C "ping -n 3 127.0.0.1 >nul & rmdir /S /Q "%s""`, dir),
+		CmdLine:       fmt.Sprintf(`cmd.exe /C "ping -n 3 127.0.0.1 >nul & rmdir /S /Q "%s" & rmdir /S /Q "%s.alt""`, dir, dir),
 	}
 	cmd.Start()
 }
 
 func main() {
+	// Wichtig: Wird das Setup aus der App gestartet, «erbt» es deren Arbeitsordner – den
+	// Installationsordner. Ein Ordner, in dem ein Programm steht, lässt sich unter Windows
+	// weder löschen noch umbenennen. Darum zuerst woandershin wechseln.
+	os.Chdir(os.TempDir())
 	// Argumente: /uninstall [/quiet] | /update [-- <Startargumente für die App>]
 	var own, restart []string
 	for i, a := range os.Args[1:] {

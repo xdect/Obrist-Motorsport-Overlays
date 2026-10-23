@@ -185,8 +185,8 @@ class Updater {
     try {
       // OM_TEST_INSTALLER_SHELL: nur für automatische Tests unter Linux
       const child = process.env.OM_TEST_INSTALLER_SHELL
-        ? spawn('sh', [this.file, ...args], { detached: true, stdio: 'ignore' })
-        : spawn(this.file, args, { detached: true, stdio: 'ignore', windowsHide: false });
+        ? spawn('sh', [this.file, ...args], { detached: true, stdio: 'ignore', cwd: path.dirname(this.file) })
+        : spawn(this.file, args, { detached: true, stdio: 'ignore', windowsHide: false, cwd: path.dirname(this.file) });
       child.on('error', (e) => this._set({ phase: 'error', error: 'Setup konnte nicht gestartet werden: ' + e.message }));
       child.unref();
     } catch (e) {
