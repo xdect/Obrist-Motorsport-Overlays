@@ -28,6 +28,8 @@
   <div class="om-head" id="head"></div>
   <div id="body"></div>
 </div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/fuel-calc.js"></script>
 <script src="/shared/link.js"></script>
 <script src="/shared/om.js"></script>
 <script>
@@ -37,9 +39,10 @@
 
   OM.connect({
     onFrame(f, waiting) {
-      OM.header(head, 'Fuel', waiting ? '' : `<span><b>${L(f.fuel.fuel)}</b> L</span>`);
+      OM.header(head, 'Fuel', waiting || !f.fuel ? '' : `<span><b>${L(f.fuel.fuel)}</b> L</span>`);
       if (waiting) { body.innerHTML = `<div class="empty">${OM.waitingText}</div>`; return; }
-      const x = f.fuel;
+      if (!f.fuel) return;
+      const x = OMFuel.compute(f.fuel, OM.cfg()); // mit Reserve/Durchschnitt dieses Overlays
       let hero;
       if (!x.avg) {
         hero = `<div class="hero"><span class="label">Verbrauch wird gemessen</span><span class="val">${L(x.fuel)}<small>L</small></span></div>`;

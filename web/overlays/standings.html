@@ -22,6 +22,7 @@
   <div class="om-head" id="head"></div>
   <div class="rows" id="rows"></div>
 </div>
+<script src="/shared/defaults.js"></script>
 <script src="/shared/link.js"></script>
 <script src="/shared/om.js"></script>
 <script>
@@ -42,19 +43,36 @@
       OM.header(head, f.track.name || 'Standings', meta);
 
       const isRace = /race/i.test(s.type || '');
+      if (!f.standings) return;
+      // Klassenfilter und Ausschnitt nach den Einstellungen dieses Overlays
+      const c = OM.cfg();
+      const mine = c.classFilter !== 'all';
+      let list = mine ? f.standings.filter((r) => r.classId === f.me.classId) : f.standings;
+      list = list.map((r) => ({ ...r, showPos: mine ? r.classPos : r.pos,
+        g: mine ? r.gapClass : r.gap, gl: mine ? r.gapLapsClass : r.gapLaps, best: mine ? r.fastestClass : r.fastest }));
+      const max = c.rows || 16;
+      if (list.length > max) { // Top 3 + Umfeld um mich
+        const meI = list.findIndex((r) => r.me);
+        if (meI >= max) {
+          const rest = max - 3;
+          let start = Math.max(3, meI - Math.floor(rest / 2));
+          start = Math.min(start, list.length - rest);
+          list = [...list.slice(0, 3), { gapRow: true }, ...list.slice(start + 1, start + rest)];
+        } else list = list.slice(0, max);
+      }
       let html = `<div class="row cols"><div>Pos</div><div>Nr.</div><div>Fahrer</div><div>iR</div><div>${isRace ? 'Abstand' : 'Diff.'}</div><div>Letzte</div><div>Beste</div></div>`;
-      html += f.standings.map((r) => {
+      html += list.map((r) => {
         if (r.gapRow) return '<div class="sep"></div>';
-        const gap = r.gapLaps ? `+${r.gapLaps} Rd.` : (r.gap === null ? (r.pos === 1 ? (isRace ? 'Leader' : OM.lap(r.bestLap)) : '') : '+' + r.gap.toFixed(isRace ? 1 : 3));
+        const gap = r.gl ? `+${r.gl} Rd.` : (r.g === null ? (r.showPos === 1 ? (isRace ? 'Leader' : OM.lap(r.bestLap)) : '') : '+' + r.g.toFixed(isRace ? 1 : 3));
         const lastPb = r.lastLap > 0 && r.lastLap === r.bestLap;
         return `<div class="row ${r.me ? 'me' : ''}">
-          <div class="cell-pos">${r.pos}</div>
+          <div class="cell-pos">${r.showPos}</div>
           <div><span class="num" style="--cls:${r.classColor}">${OM.esc(r.number)}</span></div>
           <div class="name">${OM.esc(r.name)}${r.onPit ? ' <span class="pit">PIT</span>' : ''}</div>
           <div class="ir sub">${OM.ir(r.iRating)}</div>
           <div class="time">${gap}</div>
           <div class="time last ${lastPb ? 'pb' : ''}">${OM.lap(r.lastLap)}</div>
-          <div class="time best ${r.fastest ? 'fastest' : ''}">${OM.lap(r.bestLap)}</div>
+          <div class="time best ${r.best ? 'fastest' : ''}">${OM.lap(r.bestLap)}</div>
         </div>`;
       }).join('');
       rowsEl.innerHTML = html;

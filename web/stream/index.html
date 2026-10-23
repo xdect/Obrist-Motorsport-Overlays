@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Stream-Overlay</title>
+<!-- In OBS als Browserquelle einbinden: Breite/Höhe = Grösse des Stream-Overlays. Hintergrund ist transparent. -->
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  #canvas { position: relative; transition: opacity .3s ease; }
+  #canvas.off { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { #canvas { transition: none; } }
+</style>
+</head>
+<body>
+<div id="canvas"></div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/stream-render.js"></script>
+<script>
+  const id = new URLSearchParams(location.search).get('id');
+  const canvas = document.getElementById('canvas');
+  let S = null;
+  let category = null;
+
+  // Nur in den gewählten Session-Arten zeigen (Training / Qualifying / Rennen)
+  function applyFilter() {
+    const s = S && S.streams[id];
+    const allowed = !s || !category || s.sessions[category] !== false;
+    canvas.classList.toggle('off', !allowed);
+  }
+
+  OMLink.connect({
+    settings(data) { S = data; OMStream.render(canvas, S, id); applyFilter(); },
+    frame(f) {
+      if (f.category && f.category !== category) { category = f.category; applyFilter(); }
+    },
+  });
+</script>
+</body>
+</html>

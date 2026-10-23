@@ -1,6 +1,14 @@
 'use strict';
 // Engine: rechnet aus dem raw-Snapshot alles, was die Overlays anzeigen.
 // Reine Logik ohne Electron/iRacing-Abhängigkeit → testbar.
+//
+// Optionen einzelner Overlays (Anzahl Autos im Relative, Klassenfilter, Sprit-Reserve …) wendet
+// jede Anzeige selbst an. So können mehrere Layouts und Stream-Overlays gleichzeitig mit
+// unterschiedlichen Einstellungen laufen. Die Engine liefert dafür jeweils das Maximum.
+const { sessionCategory } = require('../../web/shared/defaults');
+const { compute: computeFuel } = require('../../web/shared/fuel-calc');
+
+const REL_MAX = 8; // so viele Autos vor/hinter dir liefert die Engine; die Anzeige schneidet zu
 
 const wrap = (x, half) => { // auf (-half, half] abbilden
   const full = half * 2;
@@ -47,41 +55,18 @@ class FuelTracker {
     }
     this.lastFuel = car.fuel;
   }
-  // Ergebnis für das Fuel-Overlay
-  compute(raw, opts, fallbackLapTime) {
-    const car = raw.car;
-    const n = Math.max(1, opts.avgLaps || 5);
-    const recent = this.laps.slice(-n);
-    const avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
-    const max = recent.length ? Math.max(...recent) : null;
-    const last = this.laps.length ? this.laps[this.laps.length - 1] : null;
-    const times = this.lapTimes.slice(-n);
-    const refLap = times.length ? times.reduce((a, b) => a + b, 0) / times.length
-      : (car.lapBest > 0 ? car.lapBest : fallbackLapTime || null);
-
-    const lapsOfFuel = avg ? car.fuel / avg : null;
-    // Verbleibende Rennrunden ab jetzt (inkl. laufender Runde)
-    let lapsToGo = null;
-    const s = raw.session;
-    const lapFrac = car.lapDistPct >= 0 ? car.lapDistPct : 0;
-    if (s.lapsRemain !== null && s.lapsRemain !== undefined && s.lapsRemain >= 0) {
-      lapsToGo = Math.max(0, s.lapsRemain + 1 - lapFrac);
-    } else if (s.timeRemain > 0 && refLap) {
-      // Zeitrennen: Zeit bis Fahnenschwenk + die Runde, in der sie fällt
-      const lapsByTime = s.timeRemain / refLap;
-      lapsToGo = Math.max(0, Math.ceil(lapsByTime + lapFrac) - lapFrac);
-    }
-    const margin = (opts.marginLaps ?? 0.5) * (avg || 0);
-    const needTotal = (lapsToGo !== null && avg) ? lapsToGo * avg + margin : null;
-    const toAdd = needTotal !== null ? Math.max(0, needTotal - car.fuel) : null;
-    const tank = car.fuelMax > 0 ? car.fuelMax : null;
-    const stops = (toAdd !== null && tank) ? Math.ceil(toAdd / tank - 1e-9) : null;
-    // Spätestens boxen in Runde X (eine Runde Reserve)
-    const pitLap = (lapsOfFuel !== null) ? car.lapCompleted + Math.max(0, Math.floor(lapsOfFuel + lapFrac) - 1) + 1 : null;
+  // Rohdaten für die Anzeige (gerechnet wird dort mit den Optionen des Overlays)
+  raw(snapshot, fallbackLap) {
+    const car = snapshot.car, s = snapshot.session;
     return {
-      fuel: car.fuel, tank, avg, max, last, lapsOfFuel, lapsToGo, toAdd, stops, pitLap,
-      samples: this.laps.length, refLap, enough: toAdd === 0,
+      fuel: car.fuel, tank: car.fuelMax, laps: this.laps.slice(), lapTimes: this.lapTimes.slice(),
+      lapsRemain: s.lapsRemain, timeRemain: s.timeRemain, lapDistPct: car.lapDistPct,
+      lapCompleted: car.lapCompleted, lapBest: car.lapBest, fallbackLap,
     };
+  }
+  // Für Tests und Abwärtskompatibilität: direkt mit Optionen rechnen
+  compute(snapshot, opts, fallbackLap) {
+    return computeFuel(this.raw(snapshot, fallbackLap), opts);
   }
 }
 
@@ -91,9 +76,9 @@ class Engine {
     this.sessionUid = null;
   }
 
-  frame(raw, settings, trackInfo) {
+  frame(raw, _settings, trackInfo) {
     if (!raw || !raw.connected) {
-      return { status: 'waiting', t: Date.now() };
+      return { status: 'waiting', t: Date.now(), category: null };
     }
     if (raw.sessionUid !== this.sessionUid) {
       this.sessionUid = raw.sessionUid;
@@ -107,22 +92,22 @@ class Engine {
     const refLap = meD.classEstLap > 0 ? meD.classEstLap
       : (raw.car.lapBest > 0 ? raw.car.lapBest : 90);
 
-    const o = settings.overlays;
     return {
       status: raw.demo ? 'demo' : 'live',
       t: Date.now(),
+      category: sessionCategory(raw.session.type),
       track: raw.track,
       session: raw.session,
-      me: { idx: raw.playerIdx, name: meD.name, number: meD.number, position: me ? me.position : 0, classPosition: me ? me.classPosition : 0, lap: raw.car.lap },
-      relative: me ? this.relative(raw, me, drivers, refLap, o.relative) : [],
-      standings: this.standings(raw, drivers, meD, o.standings),
-      fuel: this.fuel.compute(raw, o.fuel, refLap),
+      me: { idx: raw.playerIdx, name: meD.name, number: meD.number, classId: meD.classId, position: me ? me.position : 0, classPosition: me ? me.classPosition : 0, lap: raw.car.lap },
+      relative: me ? this.relative(raw, me, drivers, refLap) : [],
+      standings: this.standings(raw, drivers),
+      fuel: this.fuel.raw(raw, refLap),
       inputs: {
         throttle: raw.car.throttle, brake: raw.car.brake, clutch: raw.car.clutch,
         steer: raw.car.steer, steerMax: raw.car.steerMax, gear: raw.car.gear,
         speed: raw.car.speed, rpm: raw.car.rpm, abs: raw.car.abs,
       },
-      delta: this.delta(raw.car, o.delta),
+      delta: this.delta(raw.car),
       map: {
         cars: raw.cars.filter((c) => c.inWorld).map((c) => {
           const d = drivers.get(c.idx) || {};
@@ -134,8 +119,8 @@ class Engine {
     };
   }
 
-  relative(raw, me, drivers, refLap, opts) {
-    const ahead = opts.carsAhead ?? 4, behind = opts.carsBehind ?? 4;
+  // Bis zu REL_MAX Autos vor und hinter dir, geordnet von «weit vorn» bis «weit hinten».
+  relative(raw, me, drivers, refLap) {
     const myDist = me.lapCompleted + me.pct;
     const rows = [];
     for (const c of raw.cars) {
@@ -161,73 +146,73 @@ class Engine {
       });
     }
     // gap > 0 = Auto vor mir auf der Strecke
-    const front = rows.filter((r) => !r.me && r.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, ahead).reverse();
-    const back = rows.filter((r) => !r.me && r.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, behind);
+    const front = rows.filter((r) => !r.me && r.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, REL_MAX).reverse();
+    const back = rows.filter((r) => !r.me && r.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, REL_MAX);
     const self = rows.find((r) => r.me);
     return [...front, ...(self ? [self] : []), ...back];
   }
 
-  standings(raw, drivers, meD, opts) {
+  // Vollständige Rangliste aller Autos. Abstände jeweils zum Gesamt- und zum Klassenführenden;
+  // Klassenfilter und Ausschnitt wählt die Anzeige.
+  standings(raw, drivers) {
     const list = [];
     for (const c of raw.cars) {
       const d = drivers.get(c.idx);
-      if (!d) continue;
-      if (opts.classFilter === 'mine' && meD.classId !== undefined && d.classId !== meD.classId) continue;
-      list.push({ c, d });
+      if (d) list.push({ c, d });
     }
     const isRace = /race/i.test(raw.session.type || '');
-    const sortKey = ({ c }) => {
-      if (c.position > 0) return c.position;
-      return 1000 + (c.bestLap > 0 ? c.bestLap : 1e6); // noch ohne Position: nach Bestzeit
-    };
-    list.sort((a, b) => sortKey(a) - sortKey(b));
+    const key = ({ c }) => (c.position > 0 ? c.position : 1000 + (c.bestLap > 0 ? c.bestLap : 1e6));
+    list.sort((a, b) => key(a) - key(b));
 
-    // Klassenführender als Referenz
-    const leader = list[0] ? list[0].c : null;
-    const bestOverall = Math.min(...list.map(({ c }) => (c.bestLap > 0 ? c.bestLap : Infinity)));
-    const rows = list.map(({ c, d }, i) => {
-      let gap = null, gapLaps = 0;
-      if (leader && c !== leader) {
-        if (isRace) {
-          const lapsDown = (leader.lapCompleted + leader.pct) - (c.lapCompleted + c.pct);
-          if (lapsDown >= 1) gapLaps = Math.floor(lapsDown);
-          else gap = Math.max(0, c.f2Time - leader.f2Time);
-        } else if (c.bestLap > 0 && leader.bestLap > 0) {
-          gap = c.bestLap - leader.bestLap;
-        }
+    const gapTo = (c, leader) => {
+      if (!leader || c === leader) return { gap: null, laps: 0 };
+      if (isRace) {
+        const down = (leader.lapCompleted + leader.pct) - (c.lapCompleted + c.pct);
+        if (down >= 1) return { gap: null, laps: Math.floor(down) };
+        return { gap: Math.max(0, c.f2Time - leader.f2Time), laps: 0 };
       }
+      return { gap: (c.bestLap > 0 && leader.bestLap > 0) ? c.bestLap - leader.bestLap : null, laps: 0 };
+    };
+    const classLeader = new Map();
+    const classBest = new Map();
+    let overallBest = Infinity;
+    for (const { c, d } of list) {
+      if (!classLeader.has(d.classId)) classLeader.set(d.classId, c);
+      if (c.bestLap > 0) {
+        overallBest = Math.min(overallBest, c.bestLap);
+        classBest.set(d.classId, Math.min(classBest.get(d.classId) ?? Infinity, c.bestLap));
+      }
+    }
+    const classCount = new Map();
+    return list.map(({ c, d }, i) => {
+      const n = (classCount.get(d.classId) || 0) + 1;
+      classCount.set(d.classId, n);
+      const go = gapTo(c, list[0].c);
+      const gc = gapTo(c, classLeader.get(d.classId));
       return {
-        pos: opts.classFilter === 'mine' ? (c.classPosition || i + 1) : (c.position || i + 1),
+        pos: c.position || i + 1, classPos: c.classPosition || n,
         idx: c.idx, me: c.idx === raw.playerIdx, number: d.number, name: d.name, carName: d.carName,
-        classColor: d.classColor, className: d.className, iRating: d.iRating, license: d.license, safety: d.safety,
-        licColor: d.licColor, lastLap: c.lastLap, bestLap: c.bestLap, fastest: c.bestLap > 0 && c.bestLap === bestOverall,
-        gap, gapLaps, onPit: c.onPit, lap: c.lap,
+        classId: d.classId, classColor: d.classColor, className: d.className,
+        iRating: d.iRating, license: d.license, safety: d.safety, licColor: d.licColor,
+        lastLap: c.lastLap, bestLap: c.bestLap,
+        fastest: c.bestLap > 0 && c.bestLap === overallBest,
+        fastestClass: c.bestLap > 0 && c.bestLap === classBest.get(d.classId),
+        gap: go.gap, gapLaps: go.laps, gapClass: gc.gap, gapLapsClass: gc.laps,
+        onPit: c.onPit, lap: c.lap,
       };
     });
-    // Fenster so schneiden, dass ich immer sichtbar bin (Top 3 + Umfeld)
-    const max = opts.rows || 16;
-    if (rows.length <= max) return rows;
-    const meI = rows.findIndex((r) => r.me);
-    if (meI < max) return rows.slice(0, max);
-    const top = rows.slice(0, 3);
-    const rest = max - 3;
-    let start = Math.max(3, meI - Math.floor(rest / 2));
-    start = Math.min(start, rows.length - rest);
-    return [...top, { gapRow: true }, ...rows.slice(start + 1, start + rest)];
   }
 
-  delta(car, opts) {
-    const useSession = opts.reference === 'session';
-    const ok = useSession ? car.deltaSessionOk : car.deltaBestOk;
-    const value = useSession ? car.deltaSession : car.deltaBest;
-    const rate = useSession ? car.deltaSessionRate : car.deltaBestRate;
+  delta(car) {
     const best = car.lapBest > 0 ? car.lapBest : null;
+    const pack = (ok, value, rate, predict) => ({ ok: !!ok && best !== null, value, rate, predicted: ok && best && predict ? best + value : null });
     return {
-      ok: !!ok && best !== null, value, rate, reference: useSession ? 'session' : 'best',
       best, last: car.lapLast > 0 ? car.lapLast : null, current: car.lapCurrent,
-      predicted: ok && best ? best + value : null,
+      vsBest: pack(car.deltaBestOk, car.deltaBest, car.deltaBestRate, true),
+      // Gegen die Session-Bestzeit lässt sich keine eigene Rundenzeit vorhersagen
+      vsSession: pack(car.deltaSessionOk, car.deltaSession, car.deltaSessionRate, false),
     };
   }
 }
 
-module.exports = { Engine, FuelTracker, wrap };
+module.exports = { Engine, FuelTracker, wrap, REL_MAX };

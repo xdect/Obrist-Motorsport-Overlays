@@ -7,7 +7,7 @@ als transparente Fenster über iRacing und als Browserquelle in OBS.
 
 ## Installation
 
-1. `OM-Overlays-Setup-1.2.0.exe` doppelklicken. Es sind keine weiteren Programme nötig
+1. `OM-Overlays-Setup-1.3.0.exe` doppelklicken. Es sind keine weiteren Programme nötig
    (kein Node.js, kein npm), und es braucht keine Admin-Rechte.
 2. Windows SmartScreen meldet beim ersten Start «Der Computer wurde durch Windows geschützt», weil
    das Setup nicht digital signiert ist: **Weitere Informationen → Trotzdem ausführen**.
@@ -17,7 +17,7 @@ als transparente Fenster über iRacing und als Browserquelle in OBS.
 **Update:** neues Setup einfach darüber installieren. Einstellungen und Streckenkarten bleiben.
 **Deinstallieren:** Windows-Einstellungen → Apps → Installierte Apps → OM Overlays.
 
-Ohne Installation: `OM-Overlays-1.2.0-portable.zip` entpacken und `OM Overlays.exe` starten.
+Ohne Installation: `OM-Overlays-1.3.0-portable.zip` entpacken und `OM Overlays.exe` starten.
 
 ## Benutzung
 
@@ -49,6 +49,31 @@ immer sichtbar (zum Positionieren).
 **Demo-Modus:** Ohne laufendes iRacing auf **Demo** umschalten – simuliert ein GT3-Rennen am Red Bull
 Ring mit dir auf P5. Ideal zum Positionieren und für die OBS-Einrichtung.
 
+## Layouts (im Spiel)
+
+Im Reiter **Im Spiel** legst du beliebig viele Layouts an. Ein Layout bestimmt, welche Overlays
+über iRacing erscheinen, wo sie stehen, wie gross sie sind und mit welchen Optionen.
+Oben wählst du je ein Layout für **Training**, **Qualifying** und **Rennen**. OM Overlays
+wechselt automatisch, sobald iRacing die Session wechselt.
+
+**Auf dem Bildschirm positionieren** zeigt das gewählte Layout sofort an, auch ohne iRacing.
+Overlays an ihren Platz ziehen, dann **Fertig positioniert**.
+
+## Stream-Overlays (OBS)
+
+Im Reiter **Stream** baust du ganze Szenen für OBS: eine Leinwand in der Grösse deines Streams
+(z. B. 2560 × 1440), auf der du Relative, Standings, Fuel usw. frei platzierst. Ziehen
+verschiebt ein Element (mit Umschalttaste in 10er-Schritten), Pfeiltasten pixelgenau,
+Entf entfernt es. Rechts stellst du Grösse, Deckkraft und Optionen ein.
+
+Jedes Stream-Overlay hat eine eigene Adresse, z. B. `http://127.0.0.1:7913/stream/?id=s1`.
+In OBS: Quelle **Browser**, Adresse einfügen, Breite/Höhe wie das Stream-Overlay. Unter
+«Zeigen bei» legst du fest, in welchen Session-Arten es sichtbar ist. Änderungen erscheinen
+sofort in OBS.
+
+Einzelne Overlays gehen weiterhin als eigene Quelle
+(`http://127.0.0.1:7913/overlays/relative.html`); sie folgen dann dem aktiven Spiel-Layout.
+
 ## Updates
 
 OM Overlays sucht beim Start und danach alle 6 Stunden auf GitHub
@@ -71,7 +96,8 @@ git push -u origin main --follow-tags
 
 Der Tag löst den ersten automatischen Build aus; danach steht 1.2.0 als Release bereit.
 
-Für jede weitere Version:
+Für jede weitere Version (oder einfach `veroeffentlichen.cmd` doppelklicken, wenn Version,
+Changelog und Commit schon vorbereitet sind):
 
 1. Version in `package.json` erhöhen (z. B. `1.3.0`).
 2. In `CHANGELOG.md` einen Abschnitt `## 1.3.0` mit den Neuerungen ergänzen – die erscheinen in

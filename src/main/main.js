@@ -28,6 +28,7 @@ let tray = null;
 const windows = new Map();   // id → BrowserWindow
 let hiddenAll = false;       // manuell ausgeblendet (Strg+Umschalt+H / Tray)
 let status = 'waiting';      // vom Core: 'live' | 'demo' | 'waiting'
+let layoutInfo = { active: null, category: null, editing: false }; // aktives Spiel-Layout vom Core
 let overlaysVisible = false;
 let hideTimer = null;
 let quitting = false;
@@ -62,6 +63,13 @@ function startCore() {
       if (!msg.sdk) console.warn('[OM] iRacing-SDK nicht verfügbar:', msg.sdkError);
     } else if (msg.type === 'settings') {
       onSettings(msg.data);
+    } else if (msg.type === 'layout') {
+      const changed = msg.active !== layoutInfo.active;
+      layoutInfo = { active: msg.active, category: msg.category, editing: !!msg.editing };
+      dbg('Layout', layoutInfo);
+      if (changed) syncWindows();
+      applyVisibility();
+      updateTray();
     } else if (msg.type === 'status') {
       setStatus(msg.status);
     } else if (msg.type === 'command') {
@@ -190,6 +198,8 @@ function updateTray() {
   tray.setToolTip(`OM Overlays – ${STATUS_TEXT[status] || status}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: `${STATUS_TEXT[status] || status} – ${visibleNote}`, enabled: false },
+    { label: layoutLabel(), enabled: false },
+    ...(layoutInfo.editing ? [{ label: 'Positionieren beenden', click: () => patchSettings({ editLayout: null, locked: true }) }] : []),
     { type: 'separator' },
     { label: 'Hauptfenster öffnen', click: showControl },
     { label: 'Overlays sperren', type: 'checkbox', checked: s.locked !== false, accelerator: 'CommandOrControl+Shift+L',
@@ -208,6 +218,14 @@ function updateTray() {
     { type: 'separator' },
     { label: 'OM Overlays beenden', click: () => app.quit() },
   ]));
+}
+
+function layoutLabel() {
+  const l = settings && settings.layouts && settings.layouts[layoutInfo.active];
+  const cat = { practice: 'Training', qualify: 'Qualifying', race: 'Rennen' }[layoutInfo.category];
+  if (!l) return 'Layout: –';
+  if (layoutInfo.editing) return `Layout «${l.name}» wird positioniert`;
+  return `Layout: ${l.name}${cat ? ` (${cat})` : ''}`;
 }
 
 function updateMenuItem() {
@@ -255,7 +273,8 @@ function onScreen(x, y) {
 
 // Sollen die Overlays gerade sichtbar sein?
 function shouldShow() {
-  return !hiddenAll && (status === 'live' || status === 'demo');
+  // Im Positionieren-Modus immer sichtbar, sonst nur in einer Session (oder Demo)
+  return !hiddenAll && (status === 'live' || status === 'demo' || layoutInfo.editing);
 }
 
 function setStatus(next) {
@@ -288,11 +307,22 @@ function setOverlaysVisible(v) {
   }
 }
 
+// Overlays des aktuell aktiven Spiel-Layouts
+function currentOverlays() {
+  if (!settings || !settings.layouts) return {};
+  const l = settings.layouts[layoutInfo.active] || Object.values(settings.layouts)[0];
+  return l ? l.overlays : {};
+}
+
+// Position auf dem Bildschirm (gespeicherte Position ausserhalb aller Monitore → Standardplatz)
+function placement(id, o) {
+  return onScreen(o.x, o.y) ? { x: o.x, y: o.y } : defaultPositions()[id];
+}
+
 function createOverlay(id) {
-  const o = settings.overlays[id];
+  const o = currentOverlays()[id];
   const [bw, bh] = BASE[id];
-  let { x, y } = o;
-  if (!onScreen(x, y)) ({ x, y } = defaultPositions()[id]);
+  const { x, y } = placement(id, o);
   const win = new BrowserWindow({
     x, y, width: Math.round(bw * o.scale), height: Math.round(bh * o.scale),
     frame: false, transparent: true, resizable: false, maximizable: false, minimizable: false,
@@ -323,7 +353,11 @@ function savePosition(id, win) {
   moveTimers.set(id, setTimeout(() => {
     if (win.isDestroyed()) return;
     const [x, y] = win.getPosition();
-    patchSettings({ overlays: { [id]: { x, y } } });
+    const lid = layoutInfo.active;
+    if (!lid || !settings.layouts[lid]) return;
+    const cur = settings.layouts[lid].overlays[id];
+    if (cur && cur.x === x && cur.y === y) return;
+    patchSettings({ layouts: { [lid]: { overlays: { [id]: { x, y } } } } });
   }, 250));
 }
 
@@ -336,16 +370,18 @@ function applyLock(win) {
 
 function syncWindows() {
   if (!settings || !port) return;
-  for (const [id, o] of Object.entries(settings.overlays)) {
-    if (!BASE[id]) continue;
+  const overlays = currentOverlays();
+  for (const id of Object.keys(BASE)) {
+    const o = overlays[id];
     let win = windows.get(id);
-    if (!o.enabled) { if (win && !win.isDestroyed()) win.close(); continue; }
+    if (!o || !o.enabled) { if (win && !win.isDestroyed()) win.close(); continue; }
     if (!win || win.isDestroyed()) { createOverlay(id); continue; }
     const [bw, bh] = BASE[id];
     const w = Math.round(bw * o.scale), h = Math.round(bh * o.scale);
+    const { x, y } = placement(id, o);
     const b = win.getBounds();
-    if (Math.abs(b.width - w) > 1 || Math.abs(b.height - h) > 1 || Math.abs(b.x - o.x) > 2 || Math.abs(b.y - o.y) > 2) {
-      win.setBounds({ x: o.x, y: o.y, width: w, height: h });
+    if (Math.abs(b.width - w) > 1 || Math.abs(b.height - h) > 1 || Math.abs(b.x - x) > 2 || Math.abs(b.y - y) > 2) {
+      win.setBounds({ x, y, width: w, height: h });
     }
     applyLock(win);
   }
@@ -354,9 +390,11 @@ function syncWindows() {
 function handleCommand(cmd) {
   if (cmd.cmd === 'resetPositions') {
     const def = defaultPositions();
-    const patch = { overlays: {} };
-    for (const id of Object.keys(BASE)) patch.overlays[id] = def[id];
-    patchSettings(patch);
+    const lid = cmd.layout || layoutInfo.active;
+    if (!lid) return;
+    const overlays = {};
+    for (const id of Object.keys(BASE)) overlays[id] = def[id];
+    patchSettings({ layouts: { [lid]: { overlays } } });
   } else if (cmd.cmd === 'quit') {
     app.quit();
   } else if (cmd.cmd === 'updateCheck') {

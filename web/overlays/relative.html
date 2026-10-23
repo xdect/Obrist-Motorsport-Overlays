@@ -19,6 +19,7 @@
   <div class="om-head" id="head"></div>
   <div class="rows" id="rows"></div>
 </div>
+<script src="/shared/defaults.js"></script>
 <script src="/shared/link.js"></script>
 <script src="/shared/om.js"></script>
 <script>
@@ -41,7 +42,11 @@
         : `<span><b>${OM.clock(s.timeRemain)}</b></span>`;
       OM.header(head, `P${f.me.classPosition || f.me.position || '–'}  Runde ${f.me.lap}`, meta);
 
-      rowsEl.innerHTML = f.relative.map((r) => {
+      // Ausschnitt nach den Einstellungen dieses Overlays
+      const c = OM.cfg();
+      const meI = f.relative.findIndex((r) => r.me);
+      const rows = meI < 0 ? f.relative : f.relative.slice(Math.max(0, meI - (c.carsAhead ?? 4)), meI + 1 + (c.carsBehind ?? 4));
+      rowsEl.innerHTML = rows.map((r) => {
         const cls = ['row', r.me ? 'me' : '', r.lapRel > 0 ? 'lapping' : r.lapRel < 0 ? 'lapped' : ''].join(' ');
         const gap = r.me ? '' : OM.gap(r.gap, 1);
         return `<div class="${cls}">

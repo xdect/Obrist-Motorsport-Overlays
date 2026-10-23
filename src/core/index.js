@@ -3,7 +3,7 @@
 // Läuft als eigener Prozess (von Electron gestartet), damit das Lesen der Telemetrie
 // niemals die Overlay-Fenster blockiert. Lässt sich auch allein starten: `npm run demo`.
 const path = require('path');
-const { Settings } = require('./settings');
+const { Settings, activeLayout } = require('./settings');
 const { Engine } = require('./engine');
 const { Server } = require('./server');
 const { TrackRecorder } = require('./track-recorder');
@@ -23,6 +23,21 @@ const recorder = new TrackRecorder(dataDir);
 let demo = null;
 const iracing = new IRacingSource();
 let status = 'waiting';
+let category = null;       // zuletzt erkannte Session-Art (bleibt beim Warten erhalten)
+let layoutKey = '';
+const DEMO_TYPES = { practice: 'Practice', qualify: 'Lone Qualify', race: 'Race' };
+
+// Aktives Spiel-Layout bestimmen und bei Änderung an Hauptprozess und Anzeigen melden
+function syncLayout() {
+  const s = settings.get();
+  const active = activeLayout(s, category);
+  const key = `${active}|${category}|${s.editLayout || ''}`;
+  if (key === layoutKey) return;
+  layoutKey = key;
+  const info = { active, category, editing: !!s.editLayout };
+  toParent({ type: 'layout', ...info });
+  server.setLayout(info);
+}
 
 const server = new Server({
   webRoot,
@@ -40,6 +55,7 @@ const server = new Server({
 settings.onChange((data) => {
   server.broadcast('settings', data);
   toParent({ type: 'settings', data });
+  syncLayout();
 });
 recorder.onPath((p) => server.setTrack(p));
 
@@ -63,6 +79,7 @@ async function loop() {
       if (!demo) demo = new DemoSource({ driverName: s.driverName, carNumber: s.carNumber });
       demo.step(dt);
       raw = demo.read();
+      raw.session.type = DEMO_TYPES[s.demoSession] || 'Race';
       recorder.setStatic(raw.trackPath);
     } else {
       demo = null;
@@ -74,9 +91,14 @@ async function loop() {
     }
 
     const frame = engine.frame(raw, s, { recording: recorder.recording, progress: recorder.progress });
+    if (frame.category) category = frame.category;
+    syncLayout();
     if (frame.status !== status) { status = frame.status; toParent({ type: 'status', status }); }
-    // 30 Hz an die Overlays
-    if (tick++ % 2 === 0) server.broadcast('frame', frame);
+    // 30 Hz an die Anzeigen; Rangliste und Spritdaten ändern sich langsam → nur ca. 4× pro Sekunde
+    if (tick++ % 2 === 0) {
+      if (frame.status !== 'waiting' && (tick % 16) > 1) { delete frame.standings; delete frame.fuel; }
+      server.broadcast('frame', frame);
+    }
     setTimeout(run, 16);
   };
   run();

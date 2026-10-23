@@ -18,12 +18,13 @@
 <body data-overlay="delta">
 <div class="panel">
   <div class="wrap">
-    <div class="side"><div class="k">Prognose</div><div class="v" id="pred">–</div></div>
+    <div class="side"><div class="k" id="predk">Prognose</div><div class="v" id="pred">–</div></div>
     <div class="big" id="big">–</div>
     <div class="side r"><div class="k" id="refk">Bestzeit</div><div class="v" id="best">–</div></div>
   </div>
   <div class="track"><div class="fill" id="fill"></div><div class="mid"></div></div>
 </div>
+<script src="/shared/defaults.js"></script>
 <script src="/shared/link.js"></script>
 <script src="/shared/om.js"></script>
 <script>
@@ -33,8 +34,10 @@
   OM.connect({
     onFrame(f, waiting) {
       if (waiting) { $('big').textContent = '–'; $('big').className = 'big'; return; }
-      const d = f.delta;
-      $('refk').textContent = d.reference === 'session' ? 'Session-Best' : 'Bestzeit';
+      const session = OM.cfg().reference === 'session';
+      const d = { ...f.delta, ...(session ? f.delta.vsSession : f.delta.vsBest) };
+      $('refk').textContent = session ? 'Session-Best' : 'Bestzeit';
+      $('predk').textContent = session ? 'Aktuelle Runde' : 'Prognose';
       $('best').textContent = OM.lap(d.best);
       if (!d.ok) {
         $('big').textContent = '–';
@@ -46,7 +49,7 @@
       $('big').textContent = OM.signed(d.value, 2);
       // Zahl = aktueller Trend (gewinne ich gerade Zeit?), Balken = Stand
       $('big').className = 'big ' + (d.rate < -0.01 ? 'gain' : d.rate > 0.01 ? 'loss' : '');
-      $('pred').textContent = OM.lap(d.predicted);
+      $('pred').textContent = OM.lap(d.predicted ?? d.current);
       const w = Math.min(1, Math.abs(d.value) / RANGE) * 50;
       const fill = $('fill');
       fill.style.width = w + '%';

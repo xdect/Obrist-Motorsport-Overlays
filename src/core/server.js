@@ -72,6 +72,7 @@ class Server {
     this.clients = new Set();
     this.lastTrack = null;
     this.lastUpdate = null;
+    this.lastLayout = null;
   }
 
   start() {
@@ -99,6 +100,7 @@ class Server {
     client.send(wsFrame(JSON.stringify({ event: 'settings', data: this.getSettings() })));
     if (this.lastTrack) client.send(wsFrame(JSON.stringify({ event: 'track', data: { path: this.lastTrack } })));
     if (this.lastUpdate) client.send(wsFrame(JSON.stringify({ event: 'update', data: this.lastUpdate })));
+    if (this.lastLayout) client.send(wsFrame(JSON.stringify({ event: 'layout', data: this.lastLayout })));
   }
 
   broadcast(event, data) {
@@ -108,6 +110,7 @@ class Server {
     for (const c of this.clients) c.send(frame, droppable);
   }
   setUpdate(state) { this.lastUpdate = state; this.broadcast('update', state); }
+  setLayout(info) { this.lastLayout = info; this.broadcast('layout', info); }
   setTrack(pathPts) { this.lastTrack = pathPts; this.broadcast('track', { path: pathPts }); }
 
   _json(res, code, obj) {
