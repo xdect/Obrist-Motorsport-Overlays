@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Delta</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .wrap { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 6px 12px 4px; gap: 12px; }
+  .side .k { font-size: 12px; color: var(--mist); margin-bottom: 3px; }
+  .side .v { font-size: 18px; font-weight: 600; }
+  .side.r { text-align: right; }
+  .big { font-family: var(--font-wide); font-size: 34px; font-weight: 700; min-width: 128px; text-align: center; }
+  .track { position: relative; height: 7px; margin: 2px 12px 9px; background: var(--graphite); }
+  .track .mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--gold); }
+  .track .fill { position: absolute; top: 0; bottom: 0; }
+</style>
+</head>
+<body data-overlay="delta">
+<div class="panel">
+  <div class="wrap">
+    <div class="side"><div class="k">Prognose</div><div class="v" id="pred">–</div></div>
+    <div class="big" id="big">–</div>
+    <div class="side r"><div class="k" id="refk">Bestzeit</div><div class="v" id="best">–</div></div>
+  </div>
+  <div class="track"><div class="fill" id="fill"></div><div class="mid"></div></div>
+</div>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const RANGE = 2.0; // Sekunden bis Balken voll
+
+  OM.connect({
+    onFrame(f, waiting) {
+      if (waiting) { $('big').textContent = '–'; $('big').className = 'big'; return; }
+      const d = f.delta;
+      $('refk').textContent = d.reference === 'session' ? 'Session-Best' : 'Bestzeit';
+      $('best').textContent = OM.lap(d.best);
+      if (!d.ok) {
+        $('big').textContent = '–';
+        $('big').className = 'big muted';
+        $('pred').textContent = OM.lap(d.current);
+        $('fill').style.width = '0';
+        return;
+      }
+      $('big').textContent = OM.signed(d.value, 2);
+      // Zahl = aktueller Trend (gewinne ich gerade Zeit?), Balken = Stand
+      $('big').className = 'big ' + (d.rate < -0.01 ? 'gain' : d.rate > 0.01 ? 'loss' : '');
+      $('pred').textContent = OM.lap(d.predicted);
+      const w = Math.min(1, Math.abs(d.value) / RANGE) * 50;
+      const fill = $('fill');
+      fill.style.width = w + '%';
+      fill.style.left = d.value < 0 ? (50 - w) + '%' : '50%';
+      fill.style.background = d.value < 0 ? 'var(--gain)' : 'var(--loss)';
+    },
+  });
+</script>
+</body>
+</html>

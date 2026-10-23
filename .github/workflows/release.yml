@@ -1,0 +1,63 @@
+# Baut OM Overlays und veröffentlicht ein Release, sobald ein Versions-Tag gepusht wird.
+#
+#   1. Version in package.json erhöhen und Abschnitt in CHANGELOG.md ergänzen
+#   2. git commit -am "Version 1.3.0" && git tag v1.3.0 && git push --follow-tags
+#
+# Das Release enthält die Setup-.exe, eine portable ZIP und latest.json.
+# Installierte Programme finden das Update über latest.json automatisch.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Version prüfen
+        id: ver
+        run: |
+          VER="$(node -p "require('./package.json').version")"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$VER" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} passt nicht zur Version $VER in package.json"
+            exit 1
+          fi
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            echo "::error::Release v$VER existiert bereits – Version in package.json erhöhen"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Bauen und testen
+        run: bash tools/build.sh
+
+      - name: Release veröffentlichen
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          # Bei manuellem Start legt gh den Tag v$VER auf diesem Commit selbst an
+          gh release create "v$VER" --target "$GITHUB_SHA" \
+            "dist/OM-Overlays-Setup-$VER.exe" \
+            "dist/OM-Overlays-$VER-portable.zip" \
+            dist/latest.json \
+            --title "OM Overlays $VER" \
+            --notes-file dist/notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

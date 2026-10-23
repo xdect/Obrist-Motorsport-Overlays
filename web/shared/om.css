@@ -1,0 +1,141 @@
+/* Obrist Motorsport – Overlay-Design
+   Carbon-Panels, OM-Gold als einziger Akzent, Weiss für Zahlen.
+   Signatur: schräg angeschnittener Gold-Tab mit der #13 – dieselbe Schräge markiert deine Zeile. */
+:root {
+  --carbon: 22, 23, 26;          /* #16171A Panel */
+  --graphite: #24262B;           /* Zeilen, Flächen */
+  --rule: rgba(255, 255, 255, 0.07);
+  --gold: #C8A24C;
+  --gold-pale: #E6CC86;
+  --chalk: #F2F0EA;              /* Zahlen und Namen */
+  --mist: #9A9AA0;               /* Nebeninfos */
+  --gain: #4CC38A;               /* Zeitgewinn */
+  --loss: #E0463A;               /* Zeitverlust, Bremse */
+  --lapping: #F07A5E;            /* überrundet dich */
+  --lapped: #6FA8DC;             /* wird von dir überrundet */
+  --panel-alpha: 0.92;
+  --slant: 10px;                 /* Breite der Schräge */
+  --font: "Bahnschrift SemiCondensed", "Bahnschrift", "Barlow Semi Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-wide: "Bahnschrift", "Barlow", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: transparent; overflow: hidden; }
+body {
+  font-family: var(--font);
+  color: var(--chalk);
+  font-size: 15px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  padding: 4px;
+}
+
+.panel {
+  background: rgba(var(--carbon), var(--panel-alpha));
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05) inset;
+  transition: opacity .25s ease;
+}
+
+/* Kopfzeile mit Gold-Tab */
+.om-head {
+  display: flex; align-items: stretch;
+  height: 24px;
+  background: rgba(0,0,0,0.35);
+  border-bottom: 1px solid rgba(200, 162, 76, 0.35);
+}
+.om-tab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 0 calc(var(--slant) + 8px) 0 8px;
+  background: var(--gold);
+  color: #16171A;
+  font-family: var(--font-wide);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%);
+}
+.om-tab small { font-weight: 600; font-size: 10px; opacity: .7; }
+.om-title {
+  flex: 1;
+  display: flex; align-items: center;
+  padding: 0 8px 0 2px;
+  font-size: 13px; font-weight: 600; color: var(--gold-pale);
+  letter-spacing: 0.03em;
+}
+.om-meta {
+  display: flex; align-items: center; gap: 10px;
+  padding-right: 9px;
+  font-size: 12.5px; color: var(--mist);
+}
+.om-meta b { color: var(--chalk); font-weight: 600; }
+
+/* Zeilen */
+.rows { display: flex; flex-direction: column; }
+.row {
+  position: relative;
+  display: grid;
+  align-items: center;
+  height: 27px;
+  padding: 0 8px 0 0;
+  border-top: 1px solid var(--rule);
+  font-size: 15px;
+}
+.row:first-child { border-top: 0; }
+.row.me {
+  background: linear-gradient(90deg, rgba(200,162,76,0.28), rgba(200,162,76,0.08) 70%);
+}
+.row.me::before { /* Gold-Schräge links, Echo des Kopf-Tabs */
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14px;
+  background: var(--gold);
+  clip-path: polygon(0 0, 100% 0, 45% 100%, 0 100%);
+}
+.cell-pos {
+  text-align: center; font-weight: 700; color: var(--chalk);
+}
+.num {
+  justify-self: start;
+  min-width: 30px; height: 19px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 2px;
+  background: #ECEAE4; color: #16171A;
+  font-weight: 700; font-size: 13px;
+  border-left: 3px solid var(--cls, var(--gold));
+}
+.me .num { background: var(--gold); border-left-color: #fff; }
+.name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; padding-right: 6px; }
+.me .name { font-weight: 700; }
+.sub { color: var(--mist); font-size: 12.5px; white-space: nowrap; }
+.lic {
+  justify-self: start;
+  font-size: 11.5px; font-weight: 700; padding: 2px 4px; border-radius: 2px;
+  background: var(--lc, #0153db); color: #fff;
+}
+.time { text-align: right; white-space: nowrap; }
+.pit {
+  font-size: 10.5px; font-weight: 700; color: #16171A; background: var(--chalk);
+  padding: 2px 4px; border-radius: 2px; justify-self: start;
+}
+.lapping .name, .lapping .time { color: var(--lapping); }
+.lapped .name, .lapped .time { color: var(--lapped); }
+.muted { color: var(--mist); }
+.gain { color: var(--gain); }
+.loss { color: var(--loss); }
+
+/* Leerer Zustand (wartet auf iRacing) */
+.empty {
+  padding: 14px 12px; color: var(--mist); font-size: 14px; line-height: 1.35;
+}
+body.obs.waiting .panel { opacity: 0; }
+
+/* Bearbeiten-Modus im Overlay-Fenster: ziehen zum Verschieben */
+body.edit { -webkit-app-region: drag; cursor: move; }
+body.edit .panel { outline: 2px dashed var(--gold); outline-offset: 1px; }
+body.edit::after {
+  content: "Ziehen zum Verschieben. Sperren mit Strg+Umschalt+L";
+  position: fixed; right: 8px; bottom: 6px;
+  font-size: 11px; color: #16171A; background: var(--gold); padding: 3px 6px; border-radius: 2px;
+}

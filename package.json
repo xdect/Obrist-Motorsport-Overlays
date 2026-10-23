@@ -1,0 +1,18 @@
+{
+  "name": "om-overlays",
+  "productName": "OM Overlays",
+  "version": "1.2.0",
+  "description": "Obrist Motorsport – iRacing Overlays für Fahren und Streaming",
+  "author": "Mischa Obrist",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "demo": "node src/core/index.js --demo",
+    "test": "node --test test/engine.test.js test/iracing.test.js test/updater.test.js",
+    "build": "bash tools/build.sh"
+  },
+  "updates": {
+    "github": "xdect/Obrist-Motorsport-Overlays"
+  }
+}

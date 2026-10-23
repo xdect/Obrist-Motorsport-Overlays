@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Standings</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .row { grid-template-columns: 34px 50px 1fr 44px 70px 72px 72px; }
+  .row.cols { height: 20px; font-size: 11.5px; color: var(--mist); background: rgba(0,0,0,0.2); }
+  .row.cols div { text-align: right; }
+  .row.cols div:nth-child(-n+3) { text-align: left; }
+  .row.cols div:first-child { text-align: center; }
+  .name small { color: var(--mist); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .ir { text-align: right; }
+  .best.fastest { color: #B98CF0; }       /* schnellste Runde: violett wie im Motorsport üblich */
+  .sep { height: 6px; border-top: 1px solid var(--rule); background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(255,255,255,0.06) 6px 8px); }
+  .last.pb { color: var(--gain); }
+</style>
+</head>
+<body data-overlay="standings">
+<div class="panel">
+  <div class="om-head" id="head"></div>
+  <div class="rows" id="rows"></div>
+</div>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const head = document.getElementById('head');
+  const rowsEl = document.getElementById('rows');
+  const typeDe = { Race: 'Rennen', Practice: 'Training', 'Open Qualify': 'Qualifying', 'Lone Qualify': 'Qualifying', Qualify: 'Qualifying', Warmup: 'Warm-up' };
+
+  OM.connect({
+    onFrame(f, waiting) {
+      if (waiting) {
+        OM.header(head, 'Standings', '');
+        rowsEl.innerHTML = `<div class="empty">${OM.waitingText}</div>`;
+        return;
+      }
+      const s = f.session;
+      const meta = `<span>${OM.esc(typeDe[s.type] || s.type || '')}</span><span><b>${
+        s.lapsRemain !== null && s.lapsRemain !== undefined ? s.lapsRemain + ' Rd.' : OM.clock(s.timeRemain)}</b></span>`;
+      OM.header(head, f.track.name || 'Standings', meta);
+
+      const isRace = /race/i.test(s.type || '');
+      let html = `<div class="row cols"><div>Pos</div><div>Nr.</div><div>Fahrer</div><div>iR</div><div>${isRace ? 'Abstand' : 'Diff.'}</div><div>Letzte</div><div>Beste</div></div>`;
+      html += f.standings.map((r) => {
+        if (r.gapRow) return '<div class="sep"></div>';
+        const gap = r.gapLaps ? `+${r.gapLaps} Rd.` : (r.gap === null ? (r.pos === 1 ? (isRace ? 'Leader' : OM.lap(r.bestLap)) : '') : '+' + r.gap.toFixed(isRace ? 1 : 3));
+        const lastPb = r.lastLap > 0 && r.lastLap === r.bestLap;
+        return `<div class="row ${r.me ? 'me' : ''}">
+          <div class="cell-pos">${r.pos}</div>
+          <div><span class="num" style="--cls:${r.classColor}">${OM.esc(r.number)}</span></div>
+          <div class="name">${OM.esc(r.name)}${r.onPit ? ' <span class="pit">PIT</span>' : ''}</div>
+          <div class="ir sub">${OM.ir(r.iRating)}</div>
+          <div class="time">${gap}</div>
+          <div class="time last ${lastPb ? 'pb' : ''}">${OM.lap(r.lastLap)}</div>
+          <div class="time best ${r.fastest ? 'fastest' : ''}">${OM.lap(r.bestLap)}</div>
+        </div>`;
+      }).join('');
+      rowsEl.innerHTML = html;
+    },
+  });
+</script>
+</body>
+</html>

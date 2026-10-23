@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Relative</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .row { grid-template-columns: 34px 50px 1fr auto 62px; }
+  .ir { display: flex; gap: 5px; align-items: center; padding-right: 8px; }
+  .ir .sub { min-width: 30px; text-align: right; }
+  .time { font-weight: 600; font-size: 16px; }
+  .me .time { color: var(--gold-pale); }
+  body.no-ir .ir { display: none; }
+  body.no-ir .row { grid-template-columns: 34px 50px 1fr 62px; }
+</style>
+</head>
+<body data-overlay="relative">
+<div class="panel">
+  <div class="om-head" id="head"></div>
+  <div class="rows" id="rows"></div>
+</div>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const head = document.getElementById('head');
+  const rowsEl = document.getElementById('rows');
+
+  OM.connect({
+    onSettings() {
+      document.body.classList.toggle('no-ir', OM.cfg().showIRating === false);
+    },
+    onFrame(f, waiting) {
+      if (waiting) {
+        OM.header(head, 'Relative', '');
+        rowsEl.innerHTML = `<div class="empty">${OM.waitingText}</div>`;
+        return;
+      }
+      const s = f.session;
+      const meta = (s.lapsRemain !== null && s.lapsRemain !== undefined)
+        ? `<span><b>${s.lapsRemain}</b> Rd. übrig</span>`
+        : `<span><b>${OM.clock(s.timeRemain)}</b></span>`;
+      OM.header(head, `P${f.me.classPosition || f.me.position || '–'}  Runde ${f.me.lap}`, meta);
+
+      rowsEl.innerHTML = f.relative.map((r) => {
+        const cls = ['row', r.me ? 'me' : '', r.lapRel > 0 ? 'lapping' : r.lapRel < 0 ? 'lapped' : ''].join(' ');
+        const gap = r.me ? '' : OM.gap(r.gap, 1);
+        return `<div class="${cls}">
+          <div class="cell-pos">${r.classPosition || r.position || ''}</div>
+          <div><span class="num" style="--cls:${r.classColor}">${OM.esc(r.number)}</span></div>
+          <div class="name">${OM.esc(r.name)}${r.onPit ? ' <span class="pit">PIT</span>' : ''}</div>
+          <div class="ir"><span class="sub">${OM.ir(r.iRating)}</span><span class="lic" style="--lc:${r.licColor}">${OM.esc(r.license)}</span></div>
+          <div class="time">${gap}</div>
+        </div>`;
+      }).join('');
+    },
+  });
+</script>
+</body>
+</html>

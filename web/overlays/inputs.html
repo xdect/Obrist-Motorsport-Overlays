@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Inputs</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .wrap { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 8px 10px 8px 8px; height: 134px; }
+  canvas { width: 100%; height: 100%; display: block; background: rgba(0,0,0,0.25); border-radius: 2px; }
+  .bars { display: flex; gap: 5px; align-items: stretch; }
+  .bar { width: 14px; background: var(--graphite); position: relative; border-radius: 1px; overflow: hidden; }
+  .bar i { position: absolute; left: 0; right: 0; bottom: 0; }
+  .bar.t i { background: var(--gain); }
+  .bar.b i { background: var(--loss); }
+  .bar.b.abs i { background: #FFB347; }
+  .bar.c i { background: var(--gold); }
+  .gear { width: 74px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .gear .g { font-family: var(--font-wide); font-size: 36px; font-weight: 700; line-height: .9; }
+  .gear .kmh { font-size: 15px; color: var(--mist); }
+  .gear .kmh b { color: var(--chalk); font-weight: 600; }
+  .wheel { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--mist); position: relative; }
+  .wheel::after { content: ""; position: absolute; left: 50%; top: -3px; width: 3px; height: 10px; margin-left: -1.5px; background: var(--gold); }
+</style>
+</head>
+<body data-overlay="inputs">
+<div class="panel">
+  <div class="wrap">
+    <canvas id="trace"></canvas>
+    <div class="bars">
+      <div class="bar c"><i id="bc"></i></div>
+      <div class="bar b" id="bbw"><i id="bb"></i></div>
+      <div class="bar t"><i id="bt"></i></div>
+    </div>
+    <div class="gear">
+      <div class="g" id="gear">–</div>
+      <div class="wheel" id="wheel"></div>
+      <div class="kmh"><b id="kmh">0</b> km/h</div>
+    </div>
+  </div>
+</div>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const cv = document.getElementById('trace');
+  const ctx = cv.getContext('2d');
+  const hist = [];
+  const $ = (id) => document.getElementById(id);
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (const y of [0.25, 0.5, 0.75]) { ctx.beginPath(); ctx.moveTo(0, h * y); ctx.lineTo(w, h * y); ctx.stroke(); }
+    const secs = OM.cfg().traceSeconds || 6;
+    const max = Math.max(2, Math.round(secs * 30));
+    const pad = 3;
+    const line = (key, color, width) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      hist.forEach((p, i) => {
+        const x = w - (hist.length - 1 - i) * (w / (max - 1));
+        const y = pad + (1 - p[key]) * (h - pad * 2);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.stroke();
+    };
+    line('s', 'rgba(242,240,234,0.35)', 1.5);   // Lenkung (Mitte = gerade)
+    line('t', '#4CC38A', 2);
+    line('b', '#E0463A', 2);
+  }
+
+  OM.connect({
+    onFrame(f, waiting) {
+      if (waiting) return;
+      const x = f.inputs;
+      const steerN = 0.5 - Math.max(-1, Math.min(1, x.steer / (x.steerMax || 7.85))) * 0.5;
+      hist.push({ t: x.throttle, b: x.brake, s: steerN });
+      const max = Math.round((OM.cfg().traceSeconds || 6) * 30);
+      while (hist.length > max) hist.shift();
+      $('bt').style.height = (x.throttle * 100) + '%';
+      $('bb').style.height = (x.brake * 100) + '%';
+      $('bc').style.height = (x.clutch * 100) + '%';
+      $('bbw').classList.toggle('abs', !!x.abs);
+      $('gear').textContent = x.gear === -1 ? 'R' : x.gear === 0 ? 'N' : x.gear;
+      $('kmh').textContent = Math.round(x.speed * 3.6);
+      $('wheel').style.transform = `rotate(${-x.steer}rad)`;
+      draw();
+    },
+  });
+</script>
+</body>
+</html>

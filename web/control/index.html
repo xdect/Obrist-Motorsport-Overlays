@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OM Overlays</title>
+<style>
+  :root {
+    --bg: #101113; --panel: #18191C; --line: #2A2C31; --text: #F2F0EA; --mist: #9A9AA0;
+    --gold: #C8A24C; --gold-pale: #E6CC86; --gain: #4CC38A; --loss: #E0463A;
+    --font: "Bahnschrift SemiCondensed", "Bahnschrift", "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+    --font-wide: "Bahnschrift", "Barlow", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; min-height: 100vh; }
+  button, select, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: stretch; gap: 16px; flex-wrap: wrap;
+    background: #0C0D0F; border-bottom: 1px solid rgba(200,162,76,.4);
+    padding-right: 16px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--gold); color: #16171A;
+    padding: 12px 34px 12px 18px;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
+    font-family: var(--font-wide); font-weight: 700;
+  }
+  .brand .n { font-size: 26px; line-height: 1; }
+  .brand .t { font-size: 13px; line-height: 1.15; }
+  .brand .t span { display: block; font-weight: 500; opacity: .75; }
+  .head-mid { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px; }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--mist); }
+  .status i { width: 9px; height: 9px; border-radius: 50%; background: var(--mist); }
+  .status.live i { background: var(--gain); box-shadow: 0 0 0 3px rgba(76,195,138,.2); }
+  .status.demo i { background: var(--gold); }
+  .status.live, .status.demo { color: var(--text); }
+  .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; }
+
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; padding: 7px 12px; cursor: pointer; color: var(--mist); }
+  .seg button[aria-pressed="true"] { background: #26282D; color: var(--text); box-shadow: inset 0 -2px 0 var(--gold); }
+  .btn { background: #222428; border: 1px solid var(--line); border-radius: 3px; padding: 7px 12px; cursor: pointer; }
+  .btn:hover { border-color: #3A3D44; }
+  .btn.primary { background: var(--gold); color: #16171A; border-color: var(--gold); font-weight: 700; }
+  .btn.unlocked { background: transparent; border: 1px dashed var(--gold); color: var(--gold-pale); }
+
+  main { padding: 20px 16px 40px; max-width: 1280px; margin: 0 auto; }
+  .intro { color: var(--mist); max-width: 72ch; line-height: 1.45; margin-bottom: 18px; }
+  .intro b { color: var(--text); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
+  .card.on { border-color: rgba(200,162,76,.55); }
+  .preview {
+    position: relative; height: 210px; overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.45)),
+      repeating-linear-gradient(135deg, #1D2024 0 14px, #1A1C20 14px 28px);
+    border-bottom: 1px solid var(--line);
+  }
+  .preview iframe { position: absolute; left: 10px; top: 10px; border: 0; transform-origin: 0 0; background: transparent; pointer-events: none; }
+  .card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 4px; }
+  .card-head h2 { font-family: var(--font-wide); font-size: 18px; font-weight: 700; flex: 1; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--mist); }
+  .switch input { appearance: none; width: 38px; height: 20px; border-radius: 10px; background: #2E3036; position: relative; cursor: pointer; transition: background .15s; }
+  .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #C9C8C3; transition: transform .15s; }
+  .switch input:checked { background: var(--gold); }
+  .switch input:checked::after { transform: translateX(18px); background: #16171A; }
+  .switch input:checked + span { color: var(--text); }
+
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding: 10px 14px 12px; }
+  .opt { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--mist); }
+  .opt.full { grid-column: 1 / -1; }
+  .opt output { color: var(--text); }
+  .opt input[type=range] { accent-color: var(--gold); width: 100%; }
+  .opt select, .opt input[type=number] { background: #101113; border: 1px solid var(--line); border-radius: 3px; padding: 5px 7px; }
+  .opt label.chk { flex-direction: row; display: flex; align-items: center; gap: 7px; color: var(--text); font-size: 14px; }
+  .opt label.chk input { accent-color: var(--gold); width: 16px; height: 16px; }
+
+  .obs { display: flex; gap: 8px; align-items: center; padding: 10px 14px 14px; border-top: 1px solid var(--line); margin-top: auto; }
+  .obs code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font); font-size: 13.5px; color: var(--gold-pale); background: #101113; padding: 7px 9px; border-radius: 3px; border: 1px solid var(--line); }
+  .obs .k { font-size: 12.5px; color: var(--mist); }
+
+  footer { margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: var(--mist); font-size: 13.5px; }
+  footer .spacer { flex: 1; }
+  .autostart { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; cursor: pointer; margin-left: 6px; }
+  .autostart input { accent-color: var(--gold); width: 16px; height: 16px; }
+  .keys { margin-top: 12px; color: var(--mist); font-size: 13.5px; line-height: 1.4; max-width: 90ch; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--gold); color: #16171A; padding: 8px 14px; border-radius: 3px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  /* Update-Hinweis: gleiche Gold-Schräge wie Marke und eigene Zeile in den Overlays */
+  .update { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 6px 18px; align-items: center;
+    background: #1B1A16; border: 1px solid rgba(200,162,76,.55); border-radius: 4px; padding: 14px 16px 14px 34px; margin-bottom: 18px; }
+  .update::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 18px; background: var(--gold);
+    clip-path: polygon(0 0, 100% 0, 45% 100%, 0 100%); }
+  .update h2 { font-family: var(--font-wide); font-size: 17px; font-weight: 700; }
+  .update p { color: var(--mist); font-size: 14px; line-height: 1.4; }
+  .update .acts { display: flex; gap: 8px; grid-row: 1 / span 2; grid-column: 2; }
+  .update.err { border-color: rgba(224,70,58,.6); background: #1D1615; }
+  .update.err::before { background: var(--loss); }
+  .update details { grid-column: 1 / -1; color: var(--text); font-size: 14px; line-height: 1.45; }
+  .update summary { cursor: pointer; color: var(--gold-pale); width: max-content; }
+  .update ul { margin: 6px 0 0 18px; }
+  .update .bar { grid-column: 1 / -1; height: 6px; background: #2A2C31; border-radius: 1px; overflow: hidden; }
+  .update .bar i { display: block; height: 100%; background: var(--gold); width: 0; transition: width .25s; }
+  .about { margin-top: 14px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; color: var(--mist); font-size: 13.5px; }
+  .about b { color: var(--text); font-weight: 600; }
+  @media (max-width: 640px) { .update { grid-template-columns: 1fr; } .update .acts { grid-row: auto; grid-column: 1; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="n" id="brandNum">13</div><div class="t">Obrist Motorsport<span>Overlays</span></div></div>
+  <div class="head-mid"><span class="status" id="status"><i></i><span>Verbinde …</span></span></div>
+  <div class="head-right">
+    <div class="seg" role="group" aria-label="Datenquelle">
+      <button data-source="auto">iRacing</button>
+      <button data-source="demo">Demo</button>
+    </div>
+    <button class="btn" id="lockBtn"></button>
+  </div>
+</header>
+
+<main>
+  <section class="update" id="update" hidden aria-live="polite"></section>
+  <p class="intro">Aktivierte Overlays erscheinen automatisch über iRacing, sobald du in einer Session bist, und verschwinden danach wieder. Starte iRacing dafür im <b>randlosen Fenstermodus</b>. Zum Verschieben entsperren, Overlays an ihren Platz ziehen und wieder sperren, damit Klicks durchgehen. Schliesst du dieses Fenster, läuft OM Overlays im Hintergrund weiter (Symbol im Infobereich der Taskleiste).</p>
+  <div class="grid" id="grid"></div>
+  <footer>
+    <button class="btn" id="resetPos">Fensterpositionen zurücksetzen</button>
+    <button class="btn" id="clearTrack">Streckenkarte neu aufzeichnen</button>
+    <label class="autostart"><input type="checkbox" id="autostart"> Mit Windows starten (im Hintergrund)</label>
+    <span class="spacer"></span>
+    <button class="btn" id="quitBtn">OM Overlays beenden</button>
+  </footer>
+  <div class="about">
+    <span>Version <b id="ver">–</b></span>
+    <button class="btn" id="checkBtn">Nach Updates suchen</button>
+    <label class="autostart"><input type="checkbox" id="autoUpdate"> Automatisch nach Updates suchen</label>
+    <span id="updMsg"></span>
+  </div>
+  <p class="keys">Tastenkürzel: Strg+Umschalt+L sperrt/entsperrt, Strg+Umschalt+H blendet alle Overlays aus. Für den Stream kopierst du die Adresse eines Overlays als Browserquelle in OBS.</p>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="/shared/link.js"></script>
+<script>
+  const SIZES = { relative: [430, 300], standings: [540, 620], fuel: [330, 230], inputs: [430, 150], delta: [470, 96], trackmap: [330, 330] };
+  const INFO = {
+    relative:  'Fahrer direkt vor und hinter dir auf der Strecke, mit Abstand in Sekunden.',
+    standings: 'Rangliste deiner Klasse mit Abstand, letzter und bester Runde.',
+    fuel:      'Verbrauch pro Runde, Reichweite und wie viel du beim Stopp nachtanken musst.',
+    inputs:    'Gas, Bremse, Kupplung und Lenkung als Verlauf, dazu Gang und Tempo.',
+    delta:     'Delta zur Bestzeit mit Rundenprognose.',
+    trackmap:  'Alle Autos live auf der Strecke. Die Karte wird beim ersten Mal aus deiner Fahrt aufgezeichnet.',
+  };
+  let S = null;
+  const $ = (s, el = document) => el.querySelector(s);
+  const grid = $('#grid');
+  const origin = location.origin;
+
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800); }
+
+  async function patch(p) {
+    const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
+    S = await r.json();
+    renderHeader();
+  }
+  const command = (cmd) => fetch('/api/command', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cmd) });
+
+  function extraOpts(id, o) {
+    switch (id) {
+      case 'relative': return `
+        <div class="opt"><span>Autos vor dir <output>${o.carsAhead}</output></span><input type="range" min="1" max="8" value="${o.carsAhead}" data-k="carsAhead"></div>
+        <div class="opt"><span>Autos hinter dir <output>${o.carsBehind}</output></span><input type="range" min="1" max="8" value="${o.carsBehind}" data-k="carsBehind"></div>
+        <div class="opt full"><label class="chk"><input type="checkbox" data-k="showIRating" ${o.showIRating !== false ? 'checked' : ''}> iRating und Lizenz zeigen</label></div>`;
+      case 'standings': return `
+        <div class="opt"><span>Zeilen <output>${o.rows}</output></span><input type="range" min="6" max="30" value="${o.rows}" data-k="rows"></div>
+        <div class="opt"><span>Anzeigen</span><select data-k="classFilter"><option value="mine" ${o.classFilter === 'mine' ? 'selected' : ''}>Nur meine Klasse</option><option value="all" ${o.classFilter === 'all' ? 'selected' : ''}>Alle Klassen</option></select></div>`;
+      case 'fuel': return `
+        <div class="opt"><span>Reserve <output>${o.marginLaps}</output> Rd.</span><input type="range" min="0" max="2" step="0.25" value="${o.marginLaps}" data-k="marginLaps"></div>
+        <div class="opt"><span>Durchschnitt über <output>${o.avgLaps}</output> Rd.</span><input type="range" min="1" max="10" value="${o.avgLaps}" data-k="avgLaps"></div>`;
+      case 'inputs': return `
+        <div class="opt full"><span>Verlauf <output>${o.traceSeconds}</output> s</span><input type="range" min="2" max="15" value="${o.traceSeconds}" data-k="traceSeconds"></div>`;
+      case 'delta': return `
+        <div class="opt full"><span>Vergleich mit</span><select data-k="reference"><option value="best" ${o.reference === 'best' ? 'selected' : ''}>Meiner Bestzeit</option><option value="session" ${o.reference === 'session' ? 'selected' : ''}>Session-Bestzeit</option></select></div>`;
+      case 'trackmap': return `
+        <div class="opt"><span>Drehen <output>${o.rotate}</output>°</span><input type="range" min="0" max="345" step="15" value="${o.rotate}" data-k="rotate"></div>
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="mirror" ${o.mirror ? 'checked' : ''}> Spiegeln</label><label class="chk"><input type="checkbox" data-k="showNumbers" ${o.showNumbers !== false ? 'checked' : ''}> Startnummern</label></div>`;
+    }
+    return '';
+  }
+
+  function renderCards() {
+    grid.innerHTML = '';
+    for (const [id, o] of Object.entries(S.overlays)) {
+      const [w, h] = SIZES[id];
+      const url = `${origin}/overlays/${id}.html`;
+      const card = document.createElement('section');
+      card.className = 'card' + (o.enabled ? ' on' : '');
+      card.dataset.id = id;
+      card.innerHTML = `
+        <div class="preview"><iframe src="/overlays/${id}.html?mode=preview" width="${w}" height="${h}" title="Vorschau ${id}" tabindex="-1"></iframe></div>
+        <div class="card-head"><h2>${id[0].toUpperCase() + id.slice(1)}</h2>
+          <label class="switch"><input type="checkbox" data-k="enabled" ${o.enabled ? 'checked' : ''}><span>Im Spiel</span></label></div>
+        <div class="opts">
+          <div class="opt full" style="color:var(--mist);font-size:13.5px;line-height:1.35">${INFO[id]}</div>
+          <div class="opt"><span>Grösse <output>${Math.round(o.scale * 100)}</output> %</span><input type="range" min="0.6" max="2" step="0.05" value="${o.scale}" data-k="scale"></div>
+          <div class="opt"><span>Deckkraft <output>${Math.round(o.opacity * 100)}</output> %</span><input type="range" min="0.3" max="1" step="0.02" value="${o.opacity}" data-k="opacity"></div>
+          ${extraOpts(id, o)}
+        </div>
+        <div class="obs"><span class="k">OBS</span><code title="${url}">${url}</code><button class="btn" data-copy="${url}">Kopieren</button></div>`;
+      grid.appendChild(card);
+      fitPreview(card, w, h);
+    }
+  }
+
+  function fitPreview(card, w, h) {
+    const box = $('.preview', card), fr = $('iframe', box);
+    const s = Math.min(1, (box.clientWidth - 20) / w, (box.clientHeight - 20) / h);
+    fr.style.transform = `scale(${s})`;
+  }
+  window.addEventListener('resize', () => document.querySelectorAll('.card').forEach((c) => fitPreview(c, ...SIZES[c.dataset.id])));
+
+  grid.addEventListener('input', (e) => {
+    const el = e.target, card = el.closest('.card');
+    if (!card || !el.dataset.k) return;
+    let v = el.type === 'checkbox' ? el.checked : el.type === 'range' ? Number(el.value) : el.value;
+    const out = el.parentElement.querySelector('output');
+    if (out) out.textContent = (el.dataset.k === 'scale' || el.dataset.k === 'opacity') ? Math.round(v * 100) : v;
+    if (el.dataset.k === 'enabled') card.classList.toggle('on', v);
+    clearTimeout(el._t);
+    el._t = setTimeout(() => patch({ overlays: { [card.dataset.id]: { [el.dataset.k]: v } } }), el.type === 'range' ? 120 : 0);
+  });
+  grid.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-copy]');
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast('Adresse kopiert'); }
+    catch { toast(b.dataset.copy); }
+  });
+
+  function renderHeader() {
+    document.querySelectorAll('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(S.source === b.dataset.source)));
+    const lock = $('#lockBtn');
+    lock.textContent = S.locked ? 'Overlays entsperren' : 'Overlays sperren';
+    lock.className = 'btn ' + (S.locked ? '' : 'unlocked');
+    $('#brandNum').textContent = S.carNumber || '13';
+    $('#autostart').checked = !!S.autostart;
+    $('#autoUpdate').checked = S.autoUpdate !== false;
+  }
+  document.querySelectorAll('[data-source]').forEach((b) => b.addEventListener('click', () => patch({ source: b.dataset.source })));
+  $('#lockBtn').addEventListener('click', () => {
+    patch({ locked: !S.locked });
+    if (S.locked && lastStatus === 'waiting') toast('Overlays sind erst in einer Session sichtbar. Zum Positionieren auf Demo wechseln.');
+  });
+  $('#resetPos').addEventListener('click', () => { command({ cmd: 'resetPositions' }); toast('Positionen zurückgesetzt'); });
+  $('#clearTrack').addEventListener('click', () => { command({ cmd: 'clearTrack' }); toast('Karte wird neu aufgezeichnet'); });
+  $('#autostart').addEventListener('change', (e) => {
+    patch({ autostart: e.target.checked });
+    toast(e.target.checked ? 'Startet ab jetzt mit Windows im Hintergrund' : 'Autostart aus');
+  });
+  $('#quitBtn').addEventListener('click', () => command({ cmd: 'quit' }));
+  $('#autoUpdate').addEventListener('change', (e) => patch({ autoUpdate: e.target.checked }));
+  $('#checkBtn').addEventListener('click', () => command({ cmd: 'updateCheck' }));
+
+  // ---------- Updates ----------
+  const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function notesHtml(text) {
+    const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return '';
+    const items = lines.map((l) => l.replace(/^[-*]\s+/, '')).filter((l) => !/^#/.test(l));
+    return '<ul>' + items.map((l) => `<li>${esc(l)}</li>`).join('') + '</ul>';
+  }
+  let lastPhase = '';
+  function renderUpdate(u) {
+    $('#ver').textContent = u.current || '–';
+    const box = $('#update');
+    const msg = $('#updMsg');
+    msg.textContent = u.phase === 'checking' ? 'Suche …'
+      : u.phase === 'uptodate' ? 'Du hast die neueste Version.'
+      : '';
+    $('#checkBtn').disabled = ['checking', 'downloading', 'installing'].includes(u.phase);
+    const notes = notesHtml(u.notes);
+    let html = '';
+    box.className = 'update';
+    if (u.phase === 'available') {
+      html = `<div><h2>Version ${esc(u.latest)} ist verfügbar</h2><p>Installiert sich in wenigen Sekunden, danach startet OM Overlays neu. Deine Einstellungen bleiben erhalten.</p></div>
+        <div class="acts"><button class="btn primary" data-act="install">Jetzt installieren</button></div>
+        ${notes ? `<details><summary>Was ist neu</summary>${notes}</details>` : ''}`;
+    } else if (u.phase === 'downloading') {
+      html = `<div><h2>Version ${esc(u.latest)} wird geladen</h2><p>${Math.round((u.progress || 0) * 100)} %</p></div>
+        <div class="bar"><i style="width:${Math.round((u.progress || 0) * 100)}%"></i></div>`;
+    } else if (u.phase === 'ready') {
+      html = `<div><h2>Update ${esc(u.latest)} ist bereit</h2><p>Du bist gerade in einer iRacing-Session. Das Update wird automatisch installiert, sobald du sie verlässt.</p></div>`;
+    } else if (u.phase === 'installing') {
+      html = `<div><h2>Update wird installiert</h2><p>OM Overlays beendet sich jetzt und startet mit Version ${esc(u.latest)} neu.</p></div>`;
+    } else if (u.phase === 'error') {
+      box.className = 'update err';
+      html = `<div><h2>Update nicht möglich</h2><p>${esc(u.error || 'Unbekannter Fehler.')}</p></div>
+        <div class="acts">${u.latest ? '<button class="btn" data-act="install">Erneut versuchen</button>' : '<button class="btn" data-act="check">Erneut suchen</button>'}</div>`;
+    }
+    box.innerHTML = html;
+    box.hidden = !html;
+    lastPhase = u.phase;
+  }
+  $('#update').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'install') { b.disabled = true; command({ cmd: 'updateInstall' }); }
+    if (b.dataset.act === 'check') command({ cmd: 'updateCheck' });
+  });
+
+  const STATUS = { live: 'iRacing verbunden, Overlays aktiv', demo: 'Demo läuft, Overlays aktiv', waiting: 'Wartet auf iRacing. Overlays erscheinen, sobald du in einer Session bist.' };
+  let lastStatus = '';
+  OMLink.connect({
+    update: renderUpdate,
+    settings(data) {
+      const first = !S;
+      S = data;
+      renderHeader();
+      if (first) renderCards();
+    },
+    frame(f) {
+      if (f.status === lastStatus) return;
+      lastStatus = f.status;
+      const el = $('#status');
+      el.className = 'status ' + f.status;
+      $('span', el).textContent = STATUS[f.status] || f.status;
+    },
+    close() { const el = $('#status'); el.className = 'status'; $('span', el).textContent = 'Keine Verbindung zum Core'; lastStatus = ''; },
+  });
+</script>
+</body>
+</html>
