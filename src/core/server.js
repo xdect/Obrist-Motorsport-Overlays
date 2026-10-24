@@ -93,6 +93,7 @@ class Server {
       `Sec-WebSocket-Accept: ${accept}\r\n\r\n`);
     socket.setNoDelay(true);
     const client = new WsClient(socket);
+    client.preview = /[?&]preview=1/.test(req.url); // Vorschau im Hauptfenster: bekommt Beispieldaten
     this.clients.add(client);
     const drop = () => { client.alive = false; this.clients.delete(client); };
     socket.on('data', (c) => client.onData(c, drop));
@@ -102,7 +103,16 @@ class Server {
     if (this.lastTrack) client.send(wsFrame(JSON.stringify({ event: 'track', data: this.lastTrack })));
     if (this.lastUpdate) client.send(wsFrame(JSON.stringify({ event: 'update', data: this.lastUpdate })));
     if (this.lastLayout) client.send(wsFrame(JSON.stringify({ event: 'layout', data: this.lastLayout })));
+    if (client.preview && this.sampleTrack) client.send(wsFrame(JSON.stringify({ event: 'sampleTrack', data: this.sampleTrack })));
   }
+
+  hasPreviewClients() { for (const c of this.clients) if (c.preview) return true; return false; }
+  // Beispieldaten nur an Vorschauen
+  sendPreview(event, data) {
+    const frame = wsFrame(JSON.stringify({ event, data }));
+    for (const c of this.clients) if (c.preview) c.send(frame, event === 'sample');
+  }
+  setSampleTrack(t) { this.sampleTrack = t; this.sendPreview('sampleTrack', t); }
 
   broadcast(event, data) {
     if (!this.clients.size) return;

@@ -22,6 +22,7 @@ if (args.includes('--demo')) settings.update({ source: 'demo' });
 const engine = new Engine();
 const recorder = new TrackRecorder(dataDir);
 let demo = null;
+let sample = null;         // Beispieldaten für die Vorschauen (eigene Demo, unabhängig von der Datenquelle)
 const iracing = new IRacingSource();
 let status = 'waiting';
 let category = null;       // zuletzt erkannte Session-Art (bleibt beim Warten erhalten)
@@ -76,6 +77,10 @@ settings.onChange((data) => {
   syncLayout();
 });
 recorder.onPath((p, fixed) => server.setTrack(p, fixed));
+{ // Karte für die Beispieldaten (Red Bull Ring)
+  const t = library.load(403);
+  if (t) server.setSampleTrack({ path: t.pts, turns: t.turns, fixed: true, id: t.id });
+}
 
 process.on('message', (msg) => {
   if (msg && msg.type === 'settings') settings.update(msg.patch);
@@ -122,6 +127,23 @@ async function loop() {
     if (tick++ % 2 === 0) {
       if (frame.status !== 'waiting' && (tick % 16) > 1) { delete frame.standings; delete frame.fuel; }
       server.broadcast('frame', frame);
+    }
+    // Vorschauen im Hauptfenster: Beispieldaten, solange keine echten Daten kommen
+    if (frame.status === 'waiting' && tick % 3 === 0 && server.hasPreviewClients()) {
+      if (!sample) {
+        sample = { src: new DemoSource({ driverName: s.driverName, carNumber: s.carNumber }), engine: new Engine(), last: now };
+        // ein paar Runden vorfahren, damit Sprit, Rundenzeiten und Rangliste schon Werte haben
+        for (let i = 0; i < 2400; i++) { sample.src.step(0.1); if (i % 5 === 0) sample.engine.frame(sample.src.read(), s, { recording: false, progress: 1 }); }
+      }
+      sample.src.step(Math.min(0.25, (now - sample.last) / 1000));
+      sample.last = now;
+      const sraw = sample.src.read();
+      sraw.session.type = DEMO_TYPES[s.demoSession] || 'Race';
+      const sf = sample.engine.frame(sraw, s, { recording: false, progress: 1 });
+      sf.inCar = true; sf.inGarage = false;
+      server.sendPreview('sample', sf);
+    } else if (frame.status !== 'waiting' && sample) {
+      sample = null;
     }
     setTimeout(run, 16);
   };

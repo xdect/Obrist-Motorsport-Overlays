@@ -3,6 +3,12 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.4.5
+
+- Vorschauen im Hauptfenster und im Stream-Editor zeigen Beispieldaten, auch ohne Demo-Modus und ohne laufendes iRacing
+- Die echten Overlays im Spiel und in OBS bleiben davon unberührt und zeigen nur echte Daten
+- Flaggen und Digiflag zeigen in der Vorschau eine Beispiel-Flagge
+
 ## 1.4.4
 
 - Neues Einstellungs-Menü «Overlay-Steuerung» wie bei RaceLab: aufklappbare Bereiche mit Suchfeld, ON/OFF-Schalter

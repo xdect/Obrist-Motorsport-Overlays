@@ -103,6 +103,7 @@
   OM.connect({
     onFrame(f, waiting) {
       let flag = waiting ? null : f.flag;
+      if (!flag && OM.mode === 'preview' && !waiting) flag = OMFlags.decode(OMFlags.B.caution); // Beispiel für die Vorschau
       const now = Date.now();
       // Grün auf Wunsch weglassen; sonst nur kurz zeigen (Start/Restart)
       if (flag && flag.id === 'green') {

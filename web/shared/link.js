@@ -1,11 +1,12 @@
 // Datenverbindung zum Core per WebSocket, mit automatischem Neuverbinden.
 // handlers: { settings(data), track(data), frame(data), open(), close() }
 window.OMLink = {
-  connect(handlers) {
+  // opts.preview: zusätzlich Beispieldaten für Vorschauen empfangen (wenn iRacing nicht läuft)
+  connect(handlers, opts) {
     let ws = null;
     let retry = 500;
     const open = () => {
-      ws = new WebSocket(`ws://${location.host}/ws`);
+      ws = new WebSocket(`ws://${location.host}/ws${opts && opts.preview ? '?preview=1' : ''}`);
       ws.onopen = () => { retry = 500; handlers.open && handlers.open(); };
       ws.onmessage = (e) => {
         let m;

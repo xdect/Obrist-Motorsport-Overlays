@@ -43,16 +43,21 @@
         this._applySettings();
         handlers.onSettings && handlers.onSettings(this.settings);
       };
-      OMLink.connect({
-        settings: (data) => { this.settings = data; refresh(); },
-        layout: (info) => { this.layoutInfo = info; refresh(); },
-        track: (data) => {
-          this.track = data.path;
-          this.trackTurns = data.turns || [];
-          this.trackFixed = !!data.fixed;
-          handlers.onTrack && handlers.onTrack(this.track);
-        },
-        frame: (f) => {
+      // Vorschau im Hauptfenster: Läuft iRacing nicht, zeigen die Kacheln Beispieldaten
+      // (eigene Demo im Core, die echten Overlays im Spiel und in OBS bekommen davon nichts).
+      let realTrack = null, sampleTrack = null, usingSample = false, realWaiting = true;
+      const setTrack = (data) => {
+        this.track = data ? data.path : null;
+        this.trackTurns = (data && data.turns) || [];
+        this.trackFixed = !!(data && data.fixed);
+        handlers.onTrack && handlers.onTrack(this.track);
+      };
+      const useSample = (on) => {
+        if (on === usingSample) return;
+        usingSample = on;
+        setTrack(on ? sampleTrack : realTrack);
+      };
+      const onFrame = (f) => {
           if (!this.settings) return;
           for (const k of ['standings', 'fuel']) {
             if (f[k] !== undefined) this._slow[k] = f[k];
@@ -66,9 +71,25 @@
           document.body.classList.toggle('state-off', mode === 'obs' && !allowed);
           document.body.classList.toggle('state-dim', mode === 'preview' && !allowed); // Vorschau: abgedunkelt statt weg
           handlers.onFrame && handlers.onFrame(f, waiting);
+      };
+      OMLink.connect({
+        settings: (data) => { this.settings = data; refresh(); },
+        layout: (info) => { this.layoutInfo = info; refresh(); },
+        track: (data) => { realTrack = data; if (!usingSample) setTrack(data); },
+        sampleTrack: (data) => { sampleTrack = data; if (usingSample) setTrack(data); },
+        frame: (f) => {
+          realWaiting = f.status === 'waiting';
+          if (realWaiting && usingSample) return; // Beispieldaten haben Vorrang
+          useSample(false);
+          onFrame(f);
+        },
+        sample: (f) => {
+          if (!realWaiting) return;
+          useSample(true);
+          onFrame(f);
         },
         close: () => document.body.classList.add('waiting'),
-      });
+      }, { preview: mode === 'preview' });
     },
 
     _applySettings() {

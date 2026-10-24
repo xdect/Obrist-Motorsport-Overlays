@@ -37,6 +37,8 @@
   OM.connect({
     onFrame(f, waiting) {
       let flag = waiting ? null : f.flag;
+      // Vorschau im Hauptfenster: ohne aktive Flagge eine Beispiel-Flagge zeigen
+      if (!flag && OM.mode === 'preview' && !waiting) flag = OMFlags.decode(OMFlags.B.yellow);
       const now = Date.now();
       if (!flag && shown && now - since < HOLD) flag = shown;
       if (flag && (!shown || flag.id !== shown.id)) since = now;
