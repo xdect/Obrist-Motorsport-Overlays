@@ -3,6 +3,9 @@
 // gestaltet, positioniert und in OBS eingerichtet werden können.
 // Liefert denselben raw-Snapshot wie die iRacing-Quelle.
 
+const library = require('../track-library');
+
+const TRACK_ID = 403;   // iRacing: Red Bull Ring – Grand Prix
 const TRACK_LEN = 4318; // m
 const N = 600;          // Stützpunkte entlang der Strecke
 
@@ -20,12 +23,16 @@ function catmull(p0, p1, p2, p3, t) {
 }
 
 function buildTrack() {
-  // 1) dicht abtasten
-  const dense = [];
-  const n = CTRL.length;
-  for (let i = 0; i < n; i++) {
-    const p0 = CTRL[(i - 1 + n) % n], p1 = CTRL[i], p2 = CTRL[(i + 1) % n], p3 = CTRL[(i + 2) % n];
-    for (let k = 0; k < 60; k++) dense.push(catmull(p0, p1, p2, p3, k / 60));
+  // 1) dicht abtasten – wenn möglich die echte Streckenform aus der Bibliothek
+  let dense = [];
+  const lib = library.load(TRACK_ID);
+  if (lib) dense = lib.pts.map(([x, y]) => [x / 100, y / 100]);
+  else {
+    const n = CTRL.length;
+    for (let i = 0; i < n; i++) {
+      const p0 = CTRL[(i - 1 + n) % n], p1 = CTRL[i], p2 = CTRL[(i + 1) % n], p3 = CTRL[(i + 2) % n];
+      for (let k = 0; k < 60; k++) dense.push(catmull(p0, p1, p2, p3, k / 60));
+    }
   }
   // 2) gleichmässig nach Bogenlänge neu abtasten
   const cum = [0];
@@ -64,7 +71,7 @@ function buildTrack() {
   });
 
   // 4) Geschwindigkeitsprofil (Querbeschl., Bremsen rückwärts, Beschleunigen vorwärts)
-  const VMAX = 72, ALAT = 7, DEC = 13;
+  const VMAX = 74, ALAT = 11, DEC = 14;
   const v = k.map((x) => Math.min(VMAX, Math.sqrt(ALAT / Math.max(Math.abs(x), 1e-4))));
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 2 * N - 1; i >= 0; i--) { // Bremspunkte
@@ -247,9 +254,9 @@ class DemoSource {
       connected: true,
       demo: true,
       sessionUid: 'demo',
-      track: { id: 9999, name: 'Red Bull Ring', config: 'Grand Prix', length: '4.32 km', lengthM: TRACK_LEN, pitLimitKph: 80, pitPct: 0.985 },
+      track: { id: TRACK_ID, name: 'Red Bull Ring', config: 'Grand Prix', length: '4.32 km', lengthM: TRACK_LEN, pitLimitKph: 80, pitPct: 0.985, sectors: [0.33, 0.66] },
       session: { type: 'Race', timeRemain: Math.max(0, this.timeRemain), lapsRemain: null, time: this.sessionTime, flags, timeTotal: 45 * 60, lapsTotal: null },
-      weather: { airTemp: 21.4, trackTemp: 33.8 },
+      weather: { airTemp: 21.4, trackTemp: 33.8, windDir: 1.15, windVel: 3.2 },
       playerIdx: this.playerIdx,
       car: {
         fuel: this.fuel,

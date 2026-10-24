@@ -7,6 +7,7 @@ const { Settings, activeLayout } = require('./settings');
 const { Engine } = require('./engine');
 const { Server } = require('./server');
 const { TrackRecorder } = require('./track-recorder');
+const library = require('./track-library');
 const { DemoSource } = require('./sources/demo');
 const { IRacingSource } = require('./sources/iracing');
 
@@ -62,7 +63,7 @@ const server = new Server({
   getSettings: () => settings.get(),
   onSettings: (patch) => settings.update(patch),
   onCommand: async (cmd) => {
-    if (cmd.cmd === 'clearTrack') { recorder.clear(); return { ok: true }; }
+    if (cmd.cmd === 'clearTrack') return { ok: true, cleared: recorder.clear() };
     if (cmd.cmd === 'status') return { ok: true, status, sdk: iracing.available, sdkError: iracing.error };
     toParent({ type: 'command', cmd }); // z.B. Fenster-Aktionen → Electron
     return { ok: true };
@@ -74,7 +75,7 @@ settings.onChange((data) => {
   toParent({ type: 'settings', data });
   syncLayout();
 });
-recorder.onPath((p) => server.setTrack(p));
+recorder.onPath((p, fixed) => server.setTrack(p, fixed));
 
 process.on('message', (msg) => {
   if (msg && msg.type === 'settings') settings.update(msg.patch);
@@ -99,7 +100,8 @@ async function loop() {
       raw.session.type = DEMO_TYPES[s.demoSession] || 'Race';
       raw.car.onTrack = s.demoCar !== 'box';
       raw.car.inGarage = s.demoCar === 'box'; // Demo: «in der Box» = Garage (für das Garagen-Cover)
-      recorder.setStatic(raw.trackPath);
+      if (library.load(raw.track.id)) recorder.setTrack(raw.track.id, raw.track.config);
+      else recorder.setStatic(raw.trackPath);
     } else {
       demo = null;
       raw = iracing.read(); // startet om-telemetry.exe bei Bedarf

@@ -5,6 +5,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const library = require('./track-library');
+
 const BINS = 500;
 
 class TrackRecorder {
@@ -17,14 +19,18 @@ class TrackRecorder {
   }
 
   onPath(fn) { this.listeners.add(fn); }
-  _emit() { for (const fn of this.listeners) fn(this.path); }
+  _emit() { for (const fn of this.listeners) fn(this.path, this.fixed); }
 
   setTrack(id, config) {
     const key = `${id}-${String(config || '').replace(/[^\w-]+/g, '_')}`;
     if (key === this.trackKey) return;
     this.trackKey = key;
     this.path = null;
+    this.fixed = null;
     this._resetRun();
+    // Fest hinterlegte Karte (alle iRacing-Strecken) – dann muss nichts aufgezeichnet werden
+    const lib = library.load(id);
+    if (lib) { this.fixed = lib; this.path = lib.pts; this._emit(); return; }
     try {
       const data = JSON.parse(fs.readFileSync(path.join(this.dir, key + '.json'), 'utf8'));
       if (Array.isArray(data.path) && data.path.length === BINS) this.path = data.path;
@@ -32,9 +38,10 @@ class TrackRecorder {
     this._emit();
   }
 
-  setStatic(points) { // Demo: fertige Karte übernehmen
+  setStatic(points) { // Demo ohne hinterlegte Karte: fertige Karte übernehmen
     if (this.path === points) return;
     this.path = points;
+    this.fixed = null;
     this.trackKey = 'static';
     this._emit();
   }
@@ -103,12 +110,14 @@ class TrackRecorder {
   }
 
   clear() {
+    if (this.fixed) return false; // hinterlegte Karte: nichts aufzuzeichnen
     if (this.trackKey) {
       try { fs.unlinkSync(path.join(this.dir, this.trackKey + '.json')); } catch { /* nichts */ }
     }
     this.path = null;
     this._resetRun();
     this._emit();
+    return true;
   }
 }
 

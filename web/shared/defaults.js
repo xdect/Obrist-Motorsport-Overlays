@@ -12,7 +12,7 @@
     fuel:      { title: 'Fuel',      w: 330, h: 230 },
     inputs:    { title: 'Inputs',    w: 430, h: 150 },
     delta:     { title: 'Delta',     w: 470, h: 96  },
-    trackmap:  { title: 'Trackmap',  w: 330, h: 330 },
+    trackmap:  { title: 'Trackmap',  w: 400, h: 300 },
     flags:     { title: 'Flaggen',   w: 380, h: 92 },
     digiflag:  { title: 'Digiflag',  w: 220, h: 220 },
     timer:     { title: 'Session-Timer', w: 320, h: 84 },
@@ -33,7 +33,9 @@
     fuel:      { show: 'both', marginLaps: 0.5, avgLaps: 5 },            // Reserve in Runden, Durchschnitt über N Runden
     inputs:    { show: 'both', traceSeconds: 6 },
     delta:     { show: 'both', reference: 'best' },                      // 'best' | 'session'
-    trackmap:  { show: 'both', showNumbers: true, rotate: 0, mirror: false },
+    // carLabel: 'pos' (Position) | 'num' (Startnummer) | 'none'
+    trackmap:  { show: 'both', carLabel: 'pos', showTurns: true, showSectors: true, showWind: false, showHeader: false, showBg: false,
+                 trackWidth: 9, rotate: 0, mirror: false },
     flags:     { show: 'both' },
     digiflag:  { show: 'both', showGreen: true },
     timer:     { show: 'both', mode: 'auto' },                           // 'auto' | 'time' | 'laps'

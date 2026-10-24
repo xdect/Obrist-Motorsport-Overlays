@@ -48,6 +48,8 @@
         layout: (info) => { this.layoutInfo = info; refresh(); },
         track: (data) => {
           this.track = data.path;
+          this.trackTurns = data.turns || [];
+          this.trackFixed = !!data.fixed;
           handlers.onTrack && handlers.onTrack(this.track);
         },
         frame: (f) => {

@@ -3,6 +3,15 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.4.3
+
+- Trackmap neu gestaltet: dunkles Streckenband, Kurvennummern, Start/Ziel, Sektorgrenzen, Autos mit Position, Krone für den Führenden
+- Karten für alle iRacing-Strecken sind fest hinterlegt (475 Streckenvarianten) – nichts mehr aufzeichnen
+- Trackmap ohne Kopfzeile und ohne Hintergrund; beides lässt sich einschalten
+- Neue Optionen: Beschriftung (Position, Startnummer oder keine), Streckenbreite, Kurvennummern, Sektorgrenzen, Wind-Anzeige
+- Bei mehreren Klassen erscheinen die Autos in ihrer Klassenfarbe
+- Demo fährt jetzt auf der echten Streckenform des Red Bull Rings
+
 ## 1.4.2
 
 - Hauptfenster neu aufgebaut, ähnlich wie RaceLab: Kopfleiste mit Start, Overlays, Stream, Farben und Einstellungen

@@ -99,7 +99,7 @@ class Server {
     socket.on('close', drop);
     socket.on('error', drop);
     client.send(wsFrame(JSON.stringify({ event: 'settings', data: this.getSettings() })));
-    if (this.lastTrack) client.send(wsFrame(JSON.stringify({ event: 'track', data: { path: this.lastTrack } })));
+    if (this.lastTrack) client.send(wsFrame(JSON.stringify({ event: 'track', data: this.lastTrack })));
     if (this.lastUpdate) client.send(wsFrame(JSON.stringify({ event: 'update', data: this.lastUpdate })));
     if (this.lastLayout) client.send(wsFrame(JSON.stringify({ event: 'layout', data: this.lastLayout })));
   }
@@ -112,7 +112,11 @@ class Server {
   }
   setUpdate(state) { this.lastUpdate = state; this.broadcast('update', state); }
   setLayout(info) { this.lastLayout = info; this.broadcast('layout', info); }
-  setTrack(pathPts) { this.lastTrack = pathPts; this.broadcast('track', { path: pathPts }); }
+  // fixed: hinterlegte Karte mit Kurvennummern (oder null bei aufgezeichneter Karte)
+  setTrack(pathPts, fixed) {
+    this.lastTrack = pathPts ? { path: pathPts, turns: fixed ? fixed.turns : [], fixed: !!fixed, id: fixed ? fixed.id : null } : null;
+    this.broadcast('track', this.lastTrack || { path: null, turns: [], fixed: false });
+  }
 
   _json(res, code, obj) {
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

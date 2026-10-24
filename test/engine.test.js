@@ -171,3 +171,30 @@ test('Flaggen erkennen', () => {
   assert.strictEqual(decode(0x10000 | 0x8).id, 'black');
   assert.strictEqual(decode(0x10000000 | 0x40000), null);   // nur Start-/Service-Bits → keine Flagge
 });
+
+test('Streckenkarten: alle iRacing-Strecken hinterlegt und lesbar', () => {
+  const fs = require('fs');
+  const library = require('../src/core/track-library');
+  const ids = JSON.parse(fs.readFileSync(require('path').join(library.DIR, 'index.json'), 'utf8'));
+  assert.ok(ids.length > 450, `nur ${ids.length} Strecken`);
+  for (const id of ids) {
+    const t = library.load(id);
+    assert.ok(t && t.pts.length === 720, `Strecke ${id}`);
+    assert.ok(t.pts.every(([x, y]) => x >= 0 && x <= 1000.5 && y >= 0 && y <= 1000.5), `Koordinaten ${id}`);
+  }
+  assert.strictEqual(library.load(999999), null); // unbekannt → aufzeichnen
+});
+
+test('Streckenkarte: hinterlegte Karte ersetzt die Aufzeichnung', () => {
+  const os = require('os'), path = require('path'), fs = require('fs');
+  const { TrackRecorder } = require('../src/core/track-recorder');
+  const r = new TrackRecorder(fs.mkdtempSync(path.join(os.tmpdir(), 'om-')));
+  let got = null;
+  r.onPath((p, fixed) => { got = { p, fixed }; });
+  r.setTrack(403, 'Grand Prix');
+  assert.strictEqual(r.recording, false);
+  assert.ok(got.fixed && got.fixed.turns.length >= 8);
+  assert.strictEqual(r.clear(), false);
+  r.setTrack(999999, '');
+  assert.strictEqual(r.recording, true);
+});

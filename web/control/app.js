@@ -13,7 +13,7 @@
     fuel:      'Spritrechner: Boxenfenster, Verbrauch Ø/Max/Min, Tankmenge und Rest im Ziel.',
     inputs:    'Gas, Bremse, Kupplung und Lenkung als Verlauf, dazu Gang und Tempo.',
     delta:     'Delta zur Bestzeit mit Rundenprognose.',
-    trackmap:  'Alle Autos live auf der Strecke. Die Karte wird beim ersten Mal aus deiner Fahrt aufgezeichnet.',
+    trackmap:  'Alle Autos live auf der Strecke, mit Kurvennummern. Karten für alle iRacing-Strecken sind hinterlegt.',
     flags:     'Aktuelle Flagge mit Meldung, zum Beispiel Gelb, Blau, Safety Car oder letzte Runde.',
     digiflag:  'Grosse LED-Flaggentafel wie an der Strecke. Erscheint nur, wenn eine Flagge aktiv ist.',
     timer:     'Verbleibende Zeit oder Runden der Session mit Fortschrittsbalken.',
@@ -100,8 +100,15 @@
         <div class="opt full"><span>Bild</span><span class="hint">${o.image ? 'Eigenes Bild' : 'OM-Standardbild (Akzentfarbe und #-Nummer)'}</span>
           <div class="row-acts" style="margin-top:4px"><button class="btn" data-act="coverUpload">Eigenes Bild wählen …</button>${o.image ? '<button class="btn" data-act="coverReset">Standardbild</button>' : ''}</div></div>`;
       case 'trackmap': return `
+        <div class="opt full"><span>Beschriftung der Autos</span><select data-k="carLabel">${[['pos', 'Position'], ['num', 'Startnummer'], ['none', 'Keine (nur Punkte)']].map(([k, l]) => `<option value="${k}" ${(o.carLabel || 'pos') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="opt"><span>Streckenbreite <output>${o.trackWidth ?? 9}</output></span><input type="range" min="4" max="16" step="1" value="${o.trackWidth ?? 9}" data-k="trackWidth"></div>
         <div class="opt"><span>Drehen <output>${o.rotate}</output>°</span><input type="range" min="0" max="345" step="15" value="${o.rotate}" data-k="rotate"></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="mirror" ${o.mirror ? 'checked' : ''}> Spiegeln</label><label class="chk"><input type="checkbox" data-k="showNumbers" ${o.showNumbers !== false ? 'checked' : ''}> Startnummern</label></div>`;
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="showTurns" ${o.showTurns !== false ? 'checked' : ''}> Kurvennummern</label></div>
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="showSectors" ${o.showSectors !== false ? 'checked' : ''}> Sektorgrenzen</label></div>
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="showHeader" ${o.showHeader ? 'checked' : ''}> Kopfzeile mit Streckenname</label></div>
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="showBg" ${o.showBg ? 'checked' : ''}> Hintergrund</label></div>
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="showWind" ${o.showWind ? 'checked' : ''}> Wind-Anzeige</label></div>
+        <div class="opt"><label class="chk"><input type="checkbox" data-k="mirror" ${o.mirror ? 'checked' : ''}> Spiegeln</label></div>`;
     }
     return '';
   }
@@ -817,7 +824,12 @@
   }
 
   // Einstellungen
-  $('#clearTrack').addEventListener('click', () => { command({ cmd: 'clearTrack' }); toast('Karte wird neu aufgezeichnet'); });
+  $('#clearTrack').addEventListener('click', async () => {
+    try {
+      const r = await (await command({ cmd: 'clearTrack' })).json();
+      toast(r.cleared === false ? 'Für diese Strecke ist eine Karte hinterlegt, nichts aufzuzeichnen' : 'Karte wird neu aufgezeichnet');
+    } catch { toast('Karte wird neu aufgezeichnet'); }
+  });
   $('#autostart').addEventListener('change', (e) => {
     patch({ autostart: e.target.checked });
     toast(e.target.checked ? 'Startet ab jetzt mit Windows im Hintergrund' : 'Autostart aus');

@@ -19,7 +19,7 @@ const VARS = [
   'Throttle', 'Brake', 'Clutch', 'SteeringWheelAngle', 'SteeringWheelAngleMax', 'Gear', 'Speed', 'RPM',
   'BrakeABSactive', 'VelocityX', 'VelocityY', 'Yaw',
   'EngineWarnings', 'LatAccel', 'LongAccel', 'AirTemp', 'TrackTempCrew', 'PlayerCarMyIncidentCount',
-  'SessionTimeTotal', 'SessionLapsTotal',
+  'SessionTimeTotal', 'SessionLapsTotal', 'WindDir', 'WindVel',
   // Reifen: Temperatur innen/mitte/aussen und Verschleiss (iRacing misst beides beim Boxenstopp)
   ...['LF', 'RF', 'LR', 'RR'].flatMap((t) => [`${t}tempCL`, `${t}tempCM`, `${t}tempCR`, `${t}wearL`, `${t}wearM`, `${t}wearR`]),
 ];
@@ -207,6 +207,8 @@ class IRacingSource {
         lengthM: lengthMeters(wi.TrackLength),
         pitLimitKph: speedKph(wi.TrackPitSpeedLimit),
         pitPct: Number.isFinite(Number(di.DriverPitTrkPct)) ? Number(di.DriverPitTrkPct) : null,
+        // Sektorgrenzen (Anteil der Runde), ohne Start/Ziel
+        sectors: (((S.SplitTimeInfo || {}).Sectors) || []).map((x) => Number(x.SectorStartPct)).filter((x) => x > 0 && x < 1),
       },
       session: {
         type: String(cur.SessionType || ''),
@@ -258,7 +260,7 @@ class IRacingSource {
           wear: [num(`${t}wearL`, 1), num(`${t}wearM`, 1), num(`${t}wearR`, 1)],
         }])),
       },
-      weather: { airTemp: num('AirTemp', NaN), trackTemp: num('TrackTempCrew', NaN) },
+      weather: { airTemp: num('AirTemp', NaN), trackTemp: num('TrackTempCrew', NaN), windDir: num('WindDir', NaN), windVel: num('WindVel', NaN) },
       drivers,
       cars,
     };

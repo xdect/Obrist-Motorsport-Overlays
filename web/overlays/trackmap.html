@@ -7,9 +7,13 @@
 <style>
   html, body { height: 100%; }
   .panel { height: 100%; display: flex; flex-direction: column; }
+  /* Ohne Hintergrund: nur die Strecke, wie bei RaceLab */
+  body.nobg .panel { background: transparent; box-shadow: none; border: 0; }
+  body.nohead .om-head { display: none; }
   .stage { position: relative; flex: 1; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .note { position: absolute; left: 10px; right: 10px; bottom: 8px; font-size: 12.5px; color: var(--mist); line-height: 1.3; }
+  .note { position: absolute; left: 10px; right: 10px; bottom: 8px; font-size: 12.5px; color: var(--chalk); line-height: 1.3;
+    text-shadow: 0 1px 2px rgba(0,0,0,.9); }
 </style>
 </head>
 <body data-overlay="trackmap">
@@ -21,41 +25,193 @@
 <script src="/shared/link.js"></script>
 <script src="/shared/om.js"></script>
 <script>
+  // Streckenkarte: dunkles Asphaltband, Kurvennummern, Start/Ziel, Sektoren, Autos mit Position.
+  // Die Karten aller iRacing-Strecken sind fest hinterlegt (web/tracks); nur unbekannte Strecken
+  // werden noch aus der eigenen Fahrt aufgezeichnet.
   const cv = document.getElementById('map');
   const ctx = cv.getContext('2d');
   const head = document.getElementById('head');
   const note = document.getElementById('note');
-  let proj = null; // projizierte Punkte in Pixeln
+  const FONT = 'Bahnschrift, "Barlow Semi Condensed", "Arial Narrow", sans-serif';
+  let proj = null;   // Streckenpunkte in Pixeln
+  let turns = [];    // Kurvennummern in Pixeln
+  let unit = 1;      // Grössenfaktor für Linien und Symbole
+
+  const cfg = () => {
+    const c = OM.cfg();
+    return {
+      carLabel: c.carLabel || 'pos', showTurns: c.showTurns !== false, showSectors: c.showSectors !== false,
+      showWind: !!c.showWind, showHeader: !!c.showHeader, showBg: !!c.showBg,
+      trackWidth: Number(c.trackWidth) || 9, rotate: Number(c.rotate) || 0, mirror: !!c.mirror,
+    };
+  };
 
   function buildProjection() {
     const w = cv.clientWidth, h = cv.clientHeight;
-    const cfg = OM.cfg();
+    const c = cfg();
     let pts = OM.track;
-    if (!pts || !pts.length) {
-      // Platzhalter, bis die Strecke aufgezeichnet ist
-      pts = Array.from({ length: 200 }, (_, i) => { const a = (i / 200) * Math.PI * 2; return [Math.cos(a), Math.sin(a) * 0.7]; });
-    }
-    const rot = ((cfg.rotate || 0) * Math.PI) / 180;
-    const m = cfg.mirror ? -1 : 1;
-    const t = pts.map(([x, y]) => {
-      const xr = x * Math.cos(rot) - y * Math.sin(rot);
-      const yr = x * Math.sin(rot) + y * Math.cos(rot);
+    const placeholder = !pts || !pts.length;
+    if (placeholder) pts = Array.from({ length: 200 }, (_, i) => { const a = (i / 200) * Math.PI * 2; return [Math.cos(a), Math.sin(a) * 0.6]; });
+    const rot = (c.rotate * Math.PI) / 180, m = c.mirror ? -1 : 1;
+    const tf = ([x, y]) => {
+      const xr = x * Math.cos(rot) - y * Math.sin(rot), yr = x * Math.sin(rot) + y * Math.cos(rot);
       return [xr * m, -yr]; // Bildschirm-y zeigt nach unten
-    });
-    const xs = t.map((p) => p[0]), ys = t.map((p) => p[1]);
+    };
+    const t = pts.map(tf);
+    const tt = (!placeholder && c.showTurns ? OM.trackTurns || [] : []).map((x) => ({ t: x.t, p: tf([x.x, x.y]) }));
+    const all = t.concat(tt.map((x) => x.p));
+    const xs = all.map((p) => p[0]), ys = all.map((p) => p[1]);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    const pad = 18;
+    unit = Math.max(0.6, Math.min(w, h) / 330);
+    const pad = 16 * unit + (c.showWind ? 0 : 0);
     const s = Math.min((w - pad * 2) / (maxX - minX || 1), (h - pad * 2) / (maxY - minY || 1));
     const ox = (w - (maxX - minX) * s) / 2, oy = (h - (maxY - minY) * s) / 2;
-    proj = t.map(([x, y]) => [ox + (x - minX) * s, oy + (y - minY) * s]);
+    const P = ([x, y]) => [ox + (x - minX) * s, oy + (y - minY) * s];
+    proj = t.map(P);
+    turns = tt.map((x) => ({ t: x.t, p: P(x.p) }));
   }
 
   function at(pct) {
     const n = proj.length;
-    const f = ((pct % 1) + 1) % 1 * n;
+    const f = (((pct % 1) + 1) % 1) * n;
     const i = Math.floor(f) % n, u = f - Math.floor(f);
     const a = proj[i], b = proj[(i + 1) % n];
     return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+  }
+  // Richtung quer zur Strecke an einer Stelle
+  function normal(pct) {
+    const a = at(pct - 0.003), b = at(pct + 0.003);
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    return [Math.cos(ang + Math.PI / 2), Math.sin(ang + Math.PI / 2), ang];
+  }
+
+  function luminance(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return 0.5;
+    const v = parseInt(m[1], 16);
+    return (0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255;
+  }
+  const solid = (col) => (col && col.startsWith('var(') ? OM.css(col.slice(4, -1)) : col);
+
+  function drawTrack(c, placeholder) {
+    const W = c.trackWidth * unit;
+    const line = () => { ctx.beginPath(); proj.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); };
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // weicher Schatten, heller Rand, dunkles Asphaltband
+    line(); ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = W + 7 * unit; ctx.stroke();
+    line(); ctx.strokeStyle = placeholder ? 'rgba(255,255,255,0.12)' : 'rgba(205,205,210,0.42)'; ctx.lineWidth = W + 2.6 * unit; ctx.stroke();
+    line(); ctx.strokeStyle = placeholder ? 'rgba(20,21,24,0.5)' : '#141518'; ctx.lineWidth = W; ctx.stroke();
+    if (placeholder) return;
+
+    // Sektorgrenzen: kurze Querstriche in Akzentfarbe
+    if (c.showSectors) {
+      for (const sp of OM.frame && OM.frame.map ? OM.frame.map.sectors || [] : []) {
+        const p = at(sp), [nx, ny] = normal(sp), L = W / 2 + 4 * unit;
+        ctx.strokeStyle = OM.css('--gold'); ctx.lineWidth = 2.4 * unit; ctx.lineCap = 'butt';
+        ctx.beginPath(); ctx.moveTo(p[0] + nx * L, p[1] + ny * L); ctx.lineTo(p[0] - nx * L, p[1] - ny * L); ctx.stroke();
+      }
+    }
+    // Start/Ziel: Zielflaggen-Muster quer über die Strecke
+    const s0 = at(0), [, , ang] = normal(0);
+    ctx.save();
+    ctx.translate(s0[0], s0[1]); ctx.rotate(ang);
+    const q = Math.max(2.5, (W + 7 * unit) / 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-q - unit, -2.5 * q - unit, 2 * q + 2 * unit, 5 * q + 2 * unit);
+    for (let r = 0; r < 2; r++) for (let k = 0; k < 5; k++) {
+      ctx.fillStyle = (r + k) % 2 ? '#111' : '#F4F4F0';
+      ctx.fillRect(-q + r * q, -2.5 * q + k * q, q, q);
+    }
+    ctx.restore();
+
+    // Kurvennummern
+    if (c.showTurns) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      // klein und zurückhaltend, damit sie nicht mit den Autos verwechselt werden
+      ctx.font = `600 ${7 * unit}px ${FONT}`;
+      for (const t of turns) {
+        const tw = ctx.measureText(t.t).width, hh = 10 * unit, ww = Math.max(hh, tw + 6 * unit);
+        ctx.fillStyle = 'rgba(14,15,17,0.82)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(t.p[0] - ww / 2, t.p[1] - hh / 2, ww, hh, hh / 2); else ctx.rect(t.p[0] - ww / 2, t.p[1] - hh / 2, ww, hh);
+        ctx.fill();
+        ctx.fillStyle = '#A9A8A3';
+        ctx.fillText(t.t, t.p[0], t.p[1] + 0.4 * unit);
+      }
+    }
+  }
+
+  function crown(x, y, s) {
+    ctx.fillStyle = OM.css('--gold');
+    ctx.beginPath();
+    ctx.moveTo(x - 5 * s, y + 3 * s); ctx.lineTo(x - 5.5 * s, y - 2.5 * s); ctx.lineTo(x - 2.5 * s, y); ctx.lineTo(x, y - 3.5 * s);
+    ctx.lineTo(x + 2.5 * s, y); ctx.lineTo(x + 5.5 * s, y - 2.5 * s); ctx.lineTo(x + 5 * s, y + 3 * s); ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawCars(f, c) {
+    const cars = f.map.cars.filter((x) => x.pct >= 0);
+    const multi = new Set(cars.map((x) => x.cls)).size > 1;
+    // Reihenfolge: Box zuerst, dann hinten nach vorn, ich ganz oben
+    cars.sort((a, b) => (b.pit - a.pit) || (a.me - b.me) || ((b.pos || 99) - (a.pos || 99)));
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const car of cars) {
+      const [x, y] = at(car.pct);
+      const pos = multi ? car.cpos : car.pos;
+      const label = c.carLabel === 'num' ? car.number : c.carLabel === 'pos' ? (pos > 0 ? pos : '') : '';
+      const r = (car.me ? 9.5 : label ? 7.5 : 5) * unit * (car.pit ? 0.8 : 1);
+      ctx.globalAlpha = car.pit ? 0.45 : 1;
+      let fill, text;
+      if (car.me) { fill = OM.css('--gold'); text = OM.css('--on-accent'); }
+      else if (multi) { fill = solid(car.color) || '#E9E7E1'; text = luminance(fill) > 0.55 ? '#121316' : '#FFFFFF'; }
+      else { fill = '#E9E7E1'; text = '#121316'; }
+      if (car.me) { // Lichthof um das eigene Auto
+        ctx.fillStyle = OM.alpha('--gold', 0.3);
+        ctx.beginPath(); ctx.arc(x, y, r + 5 * unit, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = (car.me ? 2 : 1.4) * unit;
+      ctx.strokeStyle = car.me ? '#FFFFFF' : 'rgba(10,10,12,0.75)';
+      ctx.stroke();
+      if (label !== '') {
+        const str = String(label);
+        ctx.font = `700 ${(car.me ? 10 : str.length > 2 ? 7 : 8.5) * unit}px ${FONT}`;
+        ctx.fillStyle = text;
+        ctx.fillText(str, x, y + 0.6 * unit);
+      }
+      if (pos === 1 && !car.pit) crown(x, y + r + 5 * unit, unit * 0.9);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Wind: Kompass oben rechts (Pfeil zeigt, wohin der Wind weht; Karte genordet angenommen)
+  function drawWind(f, c, w) {
+    const wd = f.map.wind;
+    if (!wd) return;
+    const R = 15 * unit, cx = w - R - 6 * unit, cy = R + 6 * unit;
+    ctx.fillStyle = 'rgba(18,19,22,0.85)';
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1 * unit; ctx.stroke();
+    const rot = (c.rotate * Math.PI) / 180 * (c.mirror ? -1 : 1);
+    ctx.font = `700 ${6.5 * unit}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#9A9AA0';
+    ctx.fillText('N', cx + Math.sin(-rot) * (R - 5 * unit), cy - Math.cos(-rot) * (R - 5 * unit));
+    // iRacing: WindDir = Richtung, aus der der Wind kommt (0 = Nord, im Uhrzeigersinn)
+    const a = wd.dir + Math.PI - rot;
+    const dx = Math.sin(a), dy = -Math.cos(a), L = R * 0.62;
+    ctx.strokeStyle = OM.css('--gain'); ctx.fillStyle = OM.css('--gain'); ctx.lineWidth = 2 * unit; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - dx * L, cy - dy * L); ctx.lineTo(cx + dx * L * 0.55, cy + dy * L * 0.55); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + dx * L, cy + dy * L);
+    ctx.lineTo(cx + dx * L * 0.35 - dy * 4.5 * unit, cy + dy * L * 0.35 + dx * 4.5 * unit);
+    ctx.lineTo(cx + dx * L * 0.35 + dy * 4.5 * unit, cy + dy * L * 0.35 - dx * 4.5 * unit);
+    ctx.closePath(); ctx.fill();
+    ctx.font = `700 ${8 * unit}px ${FONT}`; ctx.fillStyle = '#E9E7E1';
+    const txt = `${Math.round(wd.kph)} km/h`;
+    const tw = ctx.measureText(txt).width + 8 * unit;
+    ctx.fillStyle = 'rgba(18,19,22,0.85)';
+    ctx.fillRect(cx - tw / 2, cy + R + 3 * unit, tw, 12 * unit);
+    ctx.fillStyle = '#E9E7E1';
+    ctx.fillText(txt, cx, cy + R + 9.5 * unit);
   }
 
   function draw(f) {
@@ -67,58 +223,30 @@
     if (!proj) buildProjection();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
+    const c = cfg();
+    const placeholder = !OM.track || !OM.track.length;
+    drawTrack(c, placeholder);
+    if (!f || placeholder) return;
+    drawCars(f, c);
+    if (c.showWind) drawWind(f, c, w);
+  }
 
-    // Strecke
-    const path = () => { ctx.beginPath(); proj.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); };
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    path(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 9; ctx.stroke();
-    path(); ctx.strokeStyle = OM.alpha('--chalk', OM.track ? 0.75 : 0.18); ctx.lineWidth = 3.5; ctx.stroke();
-
-    // Start/Ziel
-    const s0 = at(0), s1 = at(0.004);
-    const ang = Math.atan2(s1[1] - s0[1], s1[0] - s0[0]) + Math.PI / 2;
-    ctx.strokeStyle = OM.css('--gold'); ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(s0[0] + Math.cos(ang) * 8, s0[1] + Math.sin(ang) * 8);
-    ctx.lineTo(s0[0] - Math.cos(ang) * 8, s0[1] - Math.sin(ang) * 8);
-    ctx.stroke();
-
-    if (!f) return;
-    const showNum = OM.cfg().showNumbers !== false;
-    const cars = [...f.map.cars].sort((a, b) => (a.me ? 1 : 0) - (b.me ? 1 : 0)); // ich zuletzt = oben
-    ctx.font = '600 10px Bahnschrift, "Barlow Semi Condensed", sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (const c of cars) {
-      if (c.pct < 0) continue;
-      const [x, y] = at(c.pct);
-      ctx.globalAlpha = c.pit ? 0.35 : 1;
-      if (c.me) {
-        ctx.fillStyle = OM.css('--gold');
-        ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-        ctx.fillStyle = OM.css('--on-accent'); ctx.font = '700 10.5px Bahnschrift, "Barlow Semi Condensed", sans-serif';
-        ctx.fillText(c.number, x, y + 0.5);
-        ctx.font = '600 10px Bahnschrift, "Barlow Semi Condensed", sans-serif';
-      } else {
-        ctx.fillStyle = '#ECEAE4';
-        ctx.beginPath(); ctx.arc(x, y, showNum ? 7.5 : 4.5, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = c.color && c.color[0] === '#' ? c.color : OM.css('--gold'); ctx.lineWidth = 1.5; ctx.stroke();
-        if (showNum) { ctx.fillStyle = '#16171A'; ctx.fillText(c.number, x, y + 0.5); }
-      }
-      ctx.globalAlpha = 1;
-    }
+  function applyLook() {
+    const c = cfg();
+    document.body.classList.toggle('nobg', !c.showBg);
+    document.body.classList.toggle('nohead', !c.showHeader);
   }
 
   window.addEventListener('resize', () => { proj = null; });
 
   OM.connect({
-    onSettings() { proj = null; },
+    onSettings() { proj = null; applyLook(); },
     onTrack() { proj = null; },
     onFrame(f, waiting) {
-      OM.header(head, waiting ? 'Trackmap' : (f.track.name || 'Trackmap'), '');
-      if (waiting) { note.textContent = OM.waitingText; draw(null); return; }
+      if (cfg().showHeader) OM.header(head, waiting ? 'Trackmap' : (f.track.name || 'Trackmap'), '');
+      if (waiting) { note.textContent = cfg().showBg ? OM.waitingText : ''; draw(null); return; }
       note.textContent = f.map.recording
-        ? `Strecke wird aus deiner Fahrt aufgezeichnet (${Math.round(f.map.progress * 100)} %). Fahr eine saubere Runde ohne Box.`
+        ? `Für diese Strecke ist keine Karte hinterlegt. Sie wird aus deiner Fahrt aufgezeichnet (${Math.round(f.map.progress * 100)} %).`
         : '';
       draw(f);
     },

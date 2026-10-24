@@ -124,8 +124,11 @@ class Engine {
       map: {
         cars: raw.cars.filter((c) => c.inWorld).map((c) => {
           const d = drivers.get(c.idx) || {};
-          return { idx: c.idx, pct: c.pct, number: d.number, color: d.classColor, me: c.idx === raw.playerIdx, pos: c.position, pit: c.onPit };
+          return { idx: c.idx, pct: c.pct, number: d.number, color: d.classColor, cls: d.classId, me: c.idx === raw.playerIdx,
+            pos: c.position, cpos: c.classPosition, pit: c.onPit };
         }),
+        sectors: (raw.track && raw.track.sectors) || [],
+        wind: raw.weather && Number.isFinite(raw.weather.windDir) ? { dir: raw.weather.windDir, kph: (raw.weather.windVel || 0) * 3.6 } : null,
         recording: trackInfo ? trackInfo.recording : false,
         progress: trackInfo ? trackInfo.progress : 1,
       },

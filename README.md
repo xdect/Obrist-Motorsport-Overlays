@@ -103,6 +103,18 @@ ausgeblendete Elemente abgedunkelt.
 - **Garagen-Cover (nur Stream):** deckt die ganze Szene ab, wenn du in der Garage bist
   (oder wahlweise immer, wenn du nicht im Auto sitzt). OM-Standardbild oder eigenes Bild hochladen.
 
+## Streckenkarten
+
+Für alle iRacing-Strecken (475 Streckenvarianten, nach TrackID) liegen die Karten fest im
+Programm (`web/tracks`). Die Trackmap zeigt sie sofort, ohne Aufzeichnung. Nur eine Strecke,
+die noch nicht hinterlegt ist, wird wie bisher aus deiner eigenen Fahrt aufgezeichnet.
+
+Die Karten stammen aus den offiziellen iRacing-Streckengrafiken, aufbereitet vom Open-Source-Projekt
+[irdashies](https://github.com/tariknz/irdashies) (MIT-Lizenz, siehe `tools/tracks/LICENSE-irdashies.txt`).
+`tools/tracks/build_library.py` rechnet sie so um, dass jeder Punkt genau einem Anteil der Runde
+entspricht, prüft die Fahrtrichtung anhand der Kurvennummern und korrigiert sie bei Bedarf.
+Neue Strecken: irdashies-Daten aktualisieren und das Skript erneut ausführen.
+
 ## Updates
 
 OM Overlays sucht beim Start und danach alle 6 Stunden auf GitHub
