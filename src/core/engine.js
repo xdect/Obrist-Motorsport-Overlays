@@ -125,8 +125,15 @@ class Engine {
         cars: raw.cars.filter((c) => c.inWorld).map((c) => {
           const d = drivers.get(c.idx) || {};
           return { idx: c.idx, pct: c.pct, number: d.number, color: d.classColor, cls: d.classId, me: c.idx === raw.playerIdx,
-            pos: c.position, cpos: c.classPosition, pit: c.onPit };
+            pos: c.position, cpos: c.classPosition, pit: c.onPit, name: d.name || '', uid: d.userId || 0 };
         }),
+        // Geist der Bestrunde: so weit wäre ich mit meiner Bestzeit (Delta × Tempo / Streckenlänge)
+        refPct: (() => {
+          const car = raw.car, L = raw.track && raw.track.lengthM;
+          if (!car || !car.deltaBestOk || !(L > 0) || !(car.lapBest > 0) || !Number.isFinite(car.deltaBest)) return null;
+          const p = car.lapDistPct + (car.deltaBest * Math.max(car.speed || 0, 10)) / L;
+          return ((p % 1) + 1) % 1;
+        })(),
         sectors: (raw.track && raw.track.sectors) || [],
         wind: raw.weather && Number.isFinite(raw.weather.windDir) ? { dir: raw.weather.windDir, kph: (raw.weather.windVel || 0) * 3.6 } : null,
         recording: trackInfo ? trackInfo.recording : false,

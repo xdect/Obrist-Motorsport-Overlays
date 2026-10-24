@@ -68,7 +68,7 @@ function startCore() {
       const changed = msg.active !== layoutInfo.active;
       layoutInfo = { active: msg.active, category: msg.category, editing: !!msg.editing };
       dbg('Layout', layoutInfo);
-      if (changed) syncWindows();
+      if (changed) { syncWindows(); syncHotkeys(); }
       applyVisibility();
       updateTray();
     } else if (msg.type === 'car') {
@@ -99,6 +99,7 @@ async function loadSettings() {
 function onSettings(data) {
   settings = data;
   syncWindows();
+  syncHotkeys();
   syncAutostart();
   if (updater && autoUpdateApplied !== (settings.autoUpdate !== false)) {
     autoUpdateApplied = settings.autoUpdate !== false;
@@ -317,7 +318,32 @@ function applyVisibility() {
 function carAllows(id) {
   if (layoutInfo.editing) return true; // beim Positionieren immer alle zeigen
   const o = currentOverlays()[id];
-  return showFor(o && o.show, inCar);
+  if (keyHidden.has(id)) return false;  // per Tastenkürzel ausgeblendet
+  return showFor(o && o.show, inCar) && OMD.sessionAllows(o, layoutInfo.category);
+}
+
+// Tastenkürzel je Overlay («Tasten- & Button-Belegung»): blendet das Element ein und aus
+const keyHidden = new Set();
+let overlayKeys = new Map(); // Kürzel → Overlay
+function syncHotkeys() {
+  const want = new Map();
+  for (const [id, o] of Object.entries(currentOverlays())) {
+    if (o && o.enabled && typeof o.hotkey === 'string' && o.hotkey) want.set(o.hotkey, id);
+  }
+  for (const [acc, id] of overlayKeys) {
+    if (want.get(acc) !== id) { try { globalShortcut.unregister(acc); } catch { /* egal */ } overlayKeys.delete(acc); }
+  }
+  for (const [acc, id] of want) {
+    if (overlayKeys.has(acc)) continue;
+    if (/^CommandOrControl\+Shift\+[LH]$/.test(acc)) continue; // feste Kürzel des Programms
+    try {
+      const ok = globalShortcut.register(acc, () => {
+        if (keyHidden.has(id)) keyHidden.delete(id); else keyHidden.add(id);
+        setOverlaysVisible(overlaysVisible);
+      });
+      if (ok) overlayKeys.set(acc, id); else dbg('Kürzel belegt:', acc);
+    } catch (e) { dbg('Kürzel ungültig:', acc, e.message); }
+  }
 }
 
 function setOverlaysVisible(v) {
@@ -345,7 +371,7 @@ function placement(id, o) {
 
 function createOverlay(id) {
   const o = currentOverlays()[id];
-  const [bw, bh] = BASE[id];
+  const [bw, bh] = OMD.baseSize(id, o);
   const { x, y } = placement(id, o);
   const win = new BrowserWindow({
     x, y, width: Math.round(bw * o.scale), height: Math.round(bh * o.scale),
@@ -400,7 +426,7 @@ function syncWindows() {
     let win = windows.get(id);
     if (!o || !o.enabled) { if (win && !win.isDestroyed()) win.close(); continue; }
     if (!win || win.isDestroyed()) { createOverlay(id); continue; }
-    const [bw, bh] = BASE[id];
+    const [bw, bh] = OMD.baseSize(id, o);
     const w = Math.round(bw * o.scale), h = Math.round(bh * o.scale);
     const { x, y } = placement(id, o);
     const b = win.getBounds();

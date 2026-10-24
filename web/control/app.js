@@ -7,6 +7,7 @@
   const origin = location.origin;
   const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const icon = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
+  const wsize = (w) => { const [a, b] = D.baseSize(w.type, w.options); return { w: a, h: b }; }; // Stream-Element
   const INFO = {
     relative:  'Fahrer direkt vor und hinter dir auf der Strecke, mit Abstand in Sekunden.',
     standings: 'Rangliste mit Abstand, letzter und bester Runde.',
@@ -99,23 +100,176 @@
         <div class="opt full"><span>Zeigen</span><select data-k="trigger"><option value="garage" ${o.trigger !== 'box' ? 'selected' : ''}>Nur in der Garage</option><option value="box" ${o.trigger === 'box' ? 'selected' : ''}>Immer, wenn ich nicht im Auto sitze</option></select></div>
         <div class="opt full"><span>Bild</span><span class="hint">${o.image ? 'Eigenes Bild' : 'OM-Standardbild (Akzentfarbe und #-Nummer)'}</span>
           <div class="row-acts" style="margin-top:4px"><button class="btn" data-act="coverUpload">Eigenes Bild wählen …</button>${o.image ? '<button class="btn" data-act="coverReset">Standardbild</button>' : ''}</div></div>`;
-      case 'trackmap': return `
-        <div class="opt full"><span>Beschriftung der Autos</span><select data-k="carLabel">${[['pos', 'Position'], ['num', 'Startnummer'], ['none', 'Keine (nur Punkte)']].map(([k, l]) => `<option value="${k}" ${(o.carLabel || 'pos') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div class="opt"><span>Streckenbreite <output>${o.trackWidth ?? 9}</output></span><input type="range" min="4" max="16" step="1" value="${o.trackWidth ?? 9}" data-k="trackWidth"></div>
-        <div class="opt"><span>Drehen <output>${o.rotate}</output>°</span><input type="range" min="0" max="345" step="15" value="${o.rotate}" data-k="rotate"></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="showTurns" ${o.showTurns !== false ? 'checked' : ''}> Kurvennummern</label></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="showSectors" ${o.showSectors !== false ? 'checked' : ''}> Sektorgrenzen</label></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="showHeader" ${o.showHeader ? 'checked' : ''}> Kopfzeile mit Streckenname</label></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="showBg" ${o.showBg ? 'checked' : ''}> Hintergrund</label></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="showWind" ${o.showWind ? 'checked' : ''}> Wind-Anzeige</label></div>
-        <div class="opt"><label class="chk"><input type="checkbox" data-k="mirror" ${o.mirror ? 'checked' : ''}> Spiegeln</label></div>`;
+      // trackmap: eigenes Menü in web/shared/schema.js
     }
     return '';
   }
-  const inputValue = (el) => (el.type === 'checkbox' ? el.checked : el.type === 'range' || el.type === 'number' ? Number(el.value) : el.value);
+  const inputValue = (el) => {
+    if (el.dataset.force !== undefined) { const v = el.dataset.force; delete el.dataset.force; return v; }
+    return el.type === 'checkbox' ? el.checked : el.type === 'range' || el.type === 'number' ? Number(el.value) : el.value;
+  };
+  const fmtOut = (el, v) => (el.dataset.pct ? Math.round(v * 100) + ' %' : el.dataset.unit ? `${v} ${el.dataset.unit}` : String(v));
   function showOutput(el, v) {
-    const out = el.parentElement.querySelector('output');
-    if (out) out.textContent = (el.dataset.k === 'scale' || el.dataset.k === 'opacity') ? Math.round(v * 100) : v;
+    const box = el.closest('.f') || el.parentElement;
+    const out = box && box.querySelector('output');
+    if (!out) return;
+    if (el.closest('.f')) out.textContent = fmtOut(el, v);
+    else out.textContent = (el.dataset.k === 'scale' || el.dataset.k === 'opacity') ? Math.round(v * 100) : v;
+  }
+
+  // ---------- Einstellungs-Menü (aufklappbare Bereiche wie bei RaceLab) ----------
+  let accOpen = new Set();
+  try { accOpen = new Set(JSON.parse(localStorage.getItem('om.acc') || '[]')); } catch { /* egal */ }
+  const saveAcc = () => { try { localStorage.setItem('om.acc', JSON.stringify([...accOpen])); } catch { /* egal */ } };
+  const accentHex = () => (getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#C8A24C');
+  const toHex = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c.toLowerCase() : '#888888');
+
+  function fieldHtml(f, o, type, ctx) {
+    const v = o[f.k] !== undefined ? o[f.k] : f.def;
+    const lbl = esc(f.label || '');
+    const hint = f.hint ? `<p class="fh">${esc(f.hint)}</p>` : '';
+    const wrap = (inner, cls = '') => `<div class="f ${cls}" data-label="${esc((f.label || '') + ' ' + (f.hint || '')).toLowerCase()}">${inner}${hint}</div>`;
+    switch (f.type) {
+      case 'range': {
+        const val = Number(v);
+        return wrap(`<div class="fl"><span>${lbl}</span><output>${f.pct ? Math.round(val * 100) + ' %' : f.unit ? `${val} ${f.unit}` : val}</output></div>
+          <input type="range" min="${f.min}" max="${f.max}" step="${f.step}" value="${val}" data-k="${f.k}" ${f.pct ? 'data-pct="1"' : ''} ${f.unit ? `data-unit="${esc(f.unit)}"` : ''} aria-label="${lbl}">`);
+      }
+      case 'toggle': {
+        const on = v !== false && v !== undefined ? !!v : false;
+        return wrap(`<span class="fl1">${lbl}</span><div class="onoff" role="group" aria-label="${lbl}">
+          <button data-set="${f.k}" data-v="1" aria-pressed="${on}">ON</button><button data-set="${f.k}" data-v="0" aria-pressed="${!on}">OFF</button></div>
+          <input type="checkbox" data-k="${f.k}" ${on ? 'checked' : ''} hidden>`, 'row');
+      }
+      case 'seg':
+        return wrap(`<div class="fl"><span>${lbl}</span></div><div class="segf" role="group" aria-label="${lbl}">${f.options.map(([k, l]) =>
+          `<button data-set="${f.k}" data-v="${esc(k)}" aria-pressed="${v === k}">${esc(l)}</button>`).join('')}</div>
+          <select data-k="${f.k}" hidden>${f.options.map(([k]) => `<option value="${esc(k)}" ${v === k ? 'selected' : ''}></option>`).join('')}</select>`);
+      case 'select':
+        return wrap(`<div class="fl"><span>${lbl}</span></div><select data-k="${f.k}" aria-label="${lbl}">${f.options.map(([k, l]) =>
+          `<option value="${esc(k)}" ${v === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`);
+      case 'color': {
+        const isAccent = f.accent && !v;
+        return wrap(`<span class="fl1">${lbl}</span><div class="colf">
+          ${f.accent ? `<button data-accent="${f.k}" aria-pressed="${isAccent}" title="Akzentfarbe verwenden">Akzent</button>` : ''}
+          <input type="color" data-k="${f.k}" value="${isAccent ? toHex(accentHex()) : toHex(v)}" aria-label="${lbl}"></div>`, 'row');
+      }
+      case 'number':
+        return wrap(`<span class="fl1">${lbl}</span><div class="numf"><input type="number" min="${f.min}" max="${f.max}" step="1" value="${Number(v) || ''}" data-k="${f.k}" aria-label="${lbl}"><span>${esc(f.unit || '')}</span></div>`, 'row');
+      case 'text':
+        return wrap(`<div class="fl"><span>${lbl}</span></div><input type="text" data-k="${f.k}" value="${esc(v || '')}" placeholder="${esc(f.placeholder || '')}" aria-label="${lbl}">`);
+      case 'hotkey':
+        return wrap(`<span class="fl1">${lbl}</span><input type="text" class="hotkey" readonly data-k="${f.k}" data-hotkey="1" value="${esc(prettyKey(v))}" data-raw="${esc(v || '')}" placeholder="Nicht belegt" aria-label="${lbl}">`, 'row');
+      case 'html':
+        if (f.html === 'typeOptions') {
+          const inner = typeOptsHtml(type, o);
+          return inner ? `<div class="f" data-label="einstellungen optionen"><div class="opts">${inner}</div></div>` : '<p class="fh">Keine weiteren Einstellungen.</p>';
+        }
+        if (f.html === 'browser') {
+          const url = `${origin}/overlays/${type}.html`;
+          return `<div class="f" data-label="browser obs adresse url">
+            <p class="fh" style="margin:0 0 6px">Als einzelne Browserquelle in OBS (Hintergrund durchsichtig). Ganze Szenen baust du unter <b>Stream</b>.</p>
+            <div class="obs"><code title="${url}">${url}</code></div>
+            <div class="row-acts" style="margin-top:8px"><button class="btn" data-copy="${url}">${icon('copy')}Kopieren</button>
+            <a class="btn" href="${url}" target="_blank" rel="noopener">${icon('stream')}Im Browser öffnen</a></div></div>`;
+        }
+        return '';
+    }
+    return '';
+  }
+  // ctx: 'game' (Spiel-Layout) oder 'stream' (Element einer Stream-Szene)
+  function accHtml(type, o, ctx) {
+    const secs = OMSchema.sections(type).filter((x) => ctx === 'game' || !x.game);
+    return `<label class="acc-filter">${icon('search')}<input type="search" placeholder="Tippen, um Einstellungen zu filtern …" aria-label="Einstellungen filtern"></label>
+      <div class="acc">${secs.map((sec, i) => {
+        const id = `${type}:${sec.id}`;
+        const open = accOpen.has(id) || (!accOpen.has('!' + id) && (sec.open || (type === 'trackmap' && sec.id === 'track')));
+        return `<section class="acc-s ${open ? 'open' : ''}" data-acc="${id}">
+          <button class="acc-h" aria-expanded="${open}"><span>${esc(sec.title)}</span><i></i></button>
+          <div class="acc-b">${sec.fields.map((f) => fieldHtml(f, o, type, ctx)).join('')}</div></section>`;
+      }).join('')}</div>`;
+  }
+  function prettyKey(acc) {
+    return String(acc || '').replace('CommandOrControl', 'Strg').replace('Shift', 'Umschalt').replace(/\+/g, ' + ');
+  }
+  // Tastenkombination → Electron-Accelerator
+  function accelerator(e) {
+    const k = e.key;
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(k)) return null;
+    let key = null;
+    if (/^F\d{1,2}$/.test(k)) key = k;
+    else if (/^[a-z0-9]$/i.test(k)) key = k.toUpperCase();
+    else if (/^Numpad\d$/.test(e.code)) key = 'num' + e.code.slice(6);
+    else key = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', ' ': 'Space', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown', Insert: 'Insert' }[k] || null;
+    if (!key) return null;
+    const mods = [e.ctrlKey && 'CommandOrControl', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
+    if (!mods.length && !/^F\d/.test(key)) return null; // einzelne Buchstaben würden beim Fahren stören
+    return [...mods, key].join('+');
+  }
+  const fire = (el) => el.dispatchEvent(new Event('input', { bubbles: true }));
+  // Klicks im Menü: Auf-/Zuklappen, ON/OFF, Segmente, Akzentfarbe
+  document.addEventListener('click', (e) => {
+    const h = e.target.closest('.acc-h');
+    if (h) {
+      const sec = h.parentElement, id = sec.dataset.acc;
+      const open = !sec.classList.contains('open');
+      sec.classList.toggle('open', open);
+      h.setAttribute('aria-expanded', String(open));
+      accOpen.delete(id); accOpen.delete('!' + id);
+      accOpen.add(open ? id : '!' + id);
+      saveAcc();
+      return;
+    }
+    const b = e.target.closest('[data-set]');
+    if (b) {
+      const f = b.closest('.f'), inp = f.querySelector(`[data-k="${b.dataset.set}"]`);
+      if (inp.type === 'checkbox') inp.checked = b.dataset.v === '1'; else inp.value = b.dataset.v;
+      $$('[data-set]', f).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      fire(inp);
+      return;
+    }
+    const a = e.target.closest('[data-accent]');
+    if (a) {
+      const inp = a.parentElement.querySelector('input[type=color]');
+      inp.dataset.force = '';
+      inp.value = toHex(accentHex());
+      a.setAttribute('aria-pressed', 'true');
+      fire(inp);
+    }
+  });
+  document.addEventListener('input', (e) => {
+    // eigene Farbe gewählt → «Akzent» nicht mehr aktiv
+    if (e.target.type === 'color' && e.target.dataset.force === undefined) {
+      const a = e.target.parentElement.querySelector('[data-accent]');
+      if (a) a.setAttribute('aria-pressed', 'false');
+    }
+    const fl = e.target.closest('.acc-filter');
+    if (fl) filterAcc(fl.parentElement, e.target.value);
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    const el = e.target;
+    if (!el.dataset || !el.dataset.hotkey) return;
+    if (e.key === 'Tab') return;
+    e.preventDefault();
+    if (e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Escape') { el.value = ''; el.dataset.force = ''; fire(el); return; }
+    const acc = accelerator(e);
+    if (!acc) return;
+    el.value = prettyKey(acc);
+    el.dataset.force = acc;
+    fire(el);
+  });
+  function filterAcc(box, q) {
+    q = String(q || '').trim().toLowerCase();
+    $$('.acc-s', box).forEach((sec) => {
+      const title = $('.acc-h span', sec).textContent.toLowerCase();
+      let any = false;
+      $$('.f', sec).forEach((f) => {
+        const hit = !q || title.includes(q) || (f.dataset.label || '').includes(q);
+        f.hidden = !hit; any = any || hit;
+      });
+      sec.hidden = !!q && !any;
+      sec.classList.toggle('force', !!q && any);
+    });
   }
 
 
@@ -383,41 +537,47 @@
     const type = ui.detail, t = D.TYPES[type], o = S.layouts[ui.layout].overlays[type];
     const key = `${ui.layout}/${type}`;
     const box = $('#ovDetail');
+    const [bw, bh] = D.baseSize(type, o);
     if (renderedDetail === key) {
+      $$('[data-set="enabled"]', box).forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.v === '1') === !!o.enabled)));
       const inp = $('input[data-k="enabled"]', box);
-      if (inp && document.activeElement !== inp) inp.checked = !!o.enabled;
+      if (inp) inp.checked = !!o.enabled;
+      // neue Grösse: nur die Vorschau anpassen, das Menü bleibt (Fokus beim Tippen)
+      const fr = $('.dprev iframe', box);
+      if (fr && (Number(fr.width) !== bw || Number(fr.height) !== bh)) { fr.width = bw; fr.height = bh; fitDetail(); }
       return;
     }
     renderedDetail = key;
-    const url = `${origin}/overlays/${type}.html`;
     box.innerHTML = `
       <div class="dhead">
         <button class="back" data-act="back">${icon('back')}Alle Overlays</button>
         <h1>${icon(type)}${esc(t.title)}</h1>
-        <span class="spacer"></span>
-        <label class="switch"><input type="checkbox" data-k="enabled" ${o.enabled ? 'checked' : ''}><span>Im Layout «${esc(S.layouts[ui.layout].name)}» anzeigen</span></label>
       </div>
       <div class="dgrid">
-        <div class="dprev"><div class="scene s-${SCENE[type] || 'steel'}"></div><div class="pvbox"><iframe src="${previewSrc(type)}" width="${t.w}" height="${t.h}" title="Vorschau ${esc(t.title)}" tabindex="-1"></iframe></div></div>
-        <div class="block dset" style="margin:0">
-          <p class="desc">${esc(INFO[type])}</p>
-          <div class="opts" data-type="${type}">
-            <div class="opt"><span>Grösse <output>${Math.round(o.scale * 100)}</output> %</span><input type="range" min="0.4" max="3" step="0.05" value="${o.scale}" data-k="scale"></div>
-            <div class="opt"><span>Deckkraft <output>${Math.round(o.opacity * 100)}</output> %</span><input type="range" min="0.3" max="1" step="0.02" value="${o.opacity}" data-k="opacity"></div>
-            ${optsHtml(type, o)}
+        <div class="dprev"><div class="scene s-${SCENE[type] || 'steel'}"></div><div class="pvbox"><iframe src="${previewSrc(type)}" width="${bw}" height="${bh}" title="Vorschau ${esc(t.title)}" tabindex="-1"></iframe></div>
+          <p class="dprev-note">${esc(INFO[type])}</p></div>
+        <aside class="ctl">
+          <div class="ctl-h">Overlay-Steuerung</div>
+          <div class="ctl-card">
+            <div class="ctl-ic">${icon(type)}</div>
+            <div class="ctl-t"><small>${esc(t.title)}</small><b>${esc(S.layouts[ui.layout].name)}</b></div>
           </div>
-        </div>
-      </div>
-      <div class="block" style="margin-top:16px">
-        <h3>Einzeln in OBS</h3>
-        <div class="obs"><code title="${url}">${url}</code><button class="btn" data-copy="${url}">${icon('copy')}Kopieren</button></div>
-        <p class="hint" style="margin-top:8px">Ganze Szenen mit mehreren Elementen baust du unter <b>Stream</b>.</p>
+          <div class="f row ctl-on" data-label="anzeigen layout">
+            <span class="fl1">Im Layout anzeigen</span>
+            <div class="onoff" role="group" aria-label="Im Layout anzeigen"><button data-set="enabled" data-v="1" aria-pressed="${!!o.enabled}">ON</button><button data-set="enabled" data-v="0" aria-pressed="${!o.enabled}">OFF</button></div>
+            <input type="checkbox" data-k="enabled" ${o.enabled ? 'checked' : ''} hidden>
+          </div>
+          ${accHtml(type, o, 'game')}
+        </aside>
       </div>`;
     requestAnimationFrame(fitDetail);
   }
   function fitDetail() {
-    const fr = $('#ovDetail iframe');
-    if (fr && ui.detail) fitFrame($('#ovDetail .pvbox'), fr, D.TYPES[ui.detail], 30);
+    const fr = $('#ovDetail .dprev iframe');
+    if (!fr || !ui.detail) return;
+    const o = S.layouts[ui.layout].overlays[ui.detail];
+    const [w, h] = D.baseSize(ui.detail, o);
+    fitFrame($('#ovDetail .pvbox'), fr, { w, h }, 30);
   }
   $('#ovDetail').addEventListener('click', (e) => {
     if (e.target.closest('[data-act="back"]')) { openDetail(null); return; }
@@ -428,8 +588,10 @@
     if (!k || !ui.detail) return;
     const v = inputValue(el);
     if (k === 'enabled') { setEnabled(ui.detail, v); return; }
+    if (el.type === 'number' && (!Number.isFinite(v) || v < Number(el.min) || v > Number(el.max))) return;
     showOutput(el, v);
-    patchSoon(`det-${ui.detail}-${k}`, { layouts: { [ui.layout]: { overlays: { [ui.detail]: { [k]: v } } } } }, el.type === 'range' ? 120 : 0);
+    patchSoon(`det-${ui.detail}-${k}`, { layouts: { [ui.layout]: { overlays: { [ui.detail]: { [k]: v } } } } },
+      el.type === 'range' ? 120 : el.type === 'number' || el.type === 'text' ? 400 : 0);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && ui.view === 'overlays' && ui.detail && !e.target.closest('input,select')) openDetail(null);
@@ -550,7 +712,7 @@
   function moveWidget(el, wid, x, y) {
     const s = S.streams[ui.stream];
     const w = s.widgets[wid];
-    const t = D.TYPES[w.type];
+    const t = wsize(w);
     x = Math.round(Math.min(Math.max(x, 0), s.width - t.w * w.scale));
     y = Math.round(Math.min(Math.max(y, 0), s.height - t.h * w.scale));
     el.style.left = x + 'px'; el.style.top = y + 'px';
@@ -570,7 +732,7 @@
       e.stopPropagation();
       if (e.button !== 0) return;
       const w = S.streams[ui.stream].widgets[wid];
-      rs = { sx: e.clientX, sy: e.clientY, scale: w.scale, t: D.TYPES[w.type] };
+      rs = { sx: e.clientX, sy: e.clientY, scale: w.scale, t: wsize(w) };
       h.setPointerCapture(e.pointerId);
     });
     h.addEventListener('pointermove', (e) => {
@@ -679,16 +841,12 @@
       return;
     }
     box.innerHTML = `
-      <h3>${t.title}</h3>
+      <h3>${icon(w.type)} ${t.title}</h3>
       <div class="pos">
         <label class="field">X (px)<input type="number" id="insX" data-k="x" value="${w.x}" step="1"></label>
         <label class="field">Y (px)<input type="number" id="insY" data-k="y" value="${w.y}" step="1"></label>
       </div>
-      <div class="opts">
-        <div class="opt"><span>Grösse <output>${Math.round(w.scale * 100)}</output> %</span><input type="range" min="0.3" max="3" step="0.05" value="${w.scale}" data-k="scale"></div>
-        <div class="opt"><span>Deckkraft <output>${Math.round(w.opacity * 100)}</output> %</span><input type="range" min="0.1" max="1" step="0.02" value="${w.opacity}" data-k="opacity"></div>
-        ${optsHtml(w.type, w.options)}
-      </div>
+      ${accHtml(w.type, { ...w.options, scale: w.scale, opacity: w.opacity }, 'stream')}
       <div class="row-acts"><button class="btn" data-act="removeWidget">Entfernen</button></div>`;
   }
   $('#inspector').addEventListener('input', (e) => {
@@ -702,7 +860,7 @@
     let p = top ? { [k]: v } : { options: { [k]: v } };
     if (k === 'x' || k === 'y' || k === 'scale') {
       // Element bleibt ganz auf der Leinwand: Position nach Bedarf nachziehen
-      const s = S.streams[ui.stream], w = { ...s.widgets[ui.widget], ...p }, t = D.TYPES[w.type];
+      const s = S.streams[ui.stream], w = { ...s.widgets[ui.widget], ...p }, t = wsize(w);
       const x = Math.round(Math.min(Math.max(w.x, 0), Math.max(0, s.width - t.w * w.scale)));
       const y = Math.round(Math.min(Math.max(w.y, 0), Math.max(0, s.height - t.h * w.scale)));
       p = { ...p, x, y };
@@ -715,7 +873,7 @@
   $('#inspector').addEventListener('change', (e) => {
     const k = e.target.dataset.k;
     if ((k !== 'x' && k !== 'y') || !ui.widget) return;
-    const s = S.streams[ui.stream], w = s.widgets[ui.widget], t = D.TYPES[w.type];
+    const s = S.streams[ui.stream], w = s.widgets[ui.widget], t = wsize(w);
     const max = k === 'x' ? s.width - t.w * w.scale : s.height - t.h * w.scale;
     e.target.value = Math.round(Math.min(Math.max(Number(e.target.value) || 0, 0), Math.max(0, max)));
   });

@@ -3,6 +3,17 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.4.4
+
+- Neues Einstellungs-Menü «Overlay-Steuerung» wie bei RaceLab: aufklappbare Bereiche mit Suchfeld, ON/OFF-Schalter
+- Trackmap mit 20 Bereichen: Demo-Modus, Grösse (Breite, Höhe, Padding), Erscheinungsbild, Sichtbarkeit, Strecke, Trackmap-Ring, Kurven, Sektoren, Fahrzeuge, Marker für Führenden, Spieler-Marker, Referenz-Marker, Freund-Marker, Fahrer-Label, Post-Pit-Indikator, Lange-Strecken-Skalierung, Wind-Indikator, Ausrichtung, Browser, Tasten-Belegung
+- Referenz-Marker: zeigt, wo du mit deiner Bestrunde gerade wärst
+- Freund-Marker: Freunde per Name oder iRacing-ID markieren
+- Fahrer-Label: Namen bei dir, deinen Nachbarn oder allen
+- Post-Pit-Indikator: markiert Autos nach dem Boxenstopp
+- Jedes Overlay: eigenes Tastenkürzel zum Ein- und Ausblenden und Auswahl der Sessions (Training, Qualifying, Rennen)
+- Der Stream-Editor nutzt dasselbe Menü
+
 ## 1.4.3
 
 - Trackmap neu gestaltet: dunkles Streckenband, Kurvennummern, Start/Ziel, Sektorgrenzen, Autos mit Position, Krone für den Führenden

@@ -103,6 +103,15 @@ ausgeblendete Elemente abgedunkelt.
 - **Garagen-Cover (nur Stream):** deckt die ganze Szene ab, wenn du in der Garage bist
   (oder wahlweise immer, wenn du nicht im Auto sitzt). OM-Standardbild oder eigenes Bild hochladen.
 
+## Overlay-Steuerung
+
+Klick auf eine Overlay-Karte öffnet rechts die **Overlay-Steuerung**: oben das Ein/Aus fürs Layout
+und ein Suchfeld, darunter aufklappbare Bereiche. Jedes Overlay hat «Sichtbarkeit» (im Auto/in der
+Box, je Session-Art), «Browser» (Adresse für OBS) und «Tasten- & Button-Belegung» (eigenes Kürzel
+zum Ein- und Ausblenden, auch für Stream Deck). Die Trackmap hat zusätzlich Grösse in Pixeln,
+Strecke, Rand, Kurven, Sektoren, Fahrzeuge, Führender, Spieler, Referenz (Geist der Bestrunde),
+Freunde, Fahrer-Label, Post-Pit, Skalierung für lange Strecken, Wind und Ausrichtung.
+
 ## Streckenkarten
 
 Für alle iRacing-Strecken (475 Streckenvarianten, nach TrackID) liegen die Karten fest im

@@ -156,6 +156,7 @@ class IRacingSource {
           classId: d.CarClassID,
           className: String(d.CarClassShortName || ''),
           classColor: hexColor(d.CarClassColor),
+          userId: Number(d.UserID) || 0,
           classEstLap: Number(d.CarClassEstLapTime) || 0,
           iRating: Number(d.IRating) || 0,
           license: lic.split(' ')[0] || '',

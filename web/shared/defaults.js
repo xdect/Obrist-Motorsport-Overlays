@@ -12,7 +12,7 @@
     fuel:      { title: 'Fuel',      w: 330, h: 230 },
     inputs:    { title: 'Inputs',    w: 430, h: 150 },
     delta:     { title: 'Delta',     w: 470, h: 96  },
-    trackmap:  { title: 'Trackmap',  w: 400, h: 300 },
+    trackmap:  { title: 'Trackmap',  w: 400, h: 300, sizable: true }, // Breite/Höhe frei einstellbar
     flags:     { title: 'Flaggen',   w: 380, h: 92 },
     digiflag:  { title: 'Digiflag',  w: 220, h: 220 },
     timer:     { title: 'Session-Timer', w: 320, h: 84 },
@@ -34,8 +34,25 @@
     inputs:    { show: 'both', traceSeconds: 6 },
     delta:     { show: 'both', reference: 'best' },                      // 'best' | 'session'
     // carLabel: 'pos' (Position) | 'num' (Startnummer) | 'none'
-    trackmap:  { show: 'both', carLabel: 'pos', showTurns: true, showSectors: true, showWind: false, showHeader: false, showBg: false,
-                 trackWidth: 9, rotate: 0, mirror: false },
+    trackmap:  {
+      show: 'both', demoClasses: 'multi',
+      width: 400, height: 300, padding: 16,                                                   // Grösse
+      showBg: false, showHeader: false, mapOpacity: 1, shadow: true,                          // Erscheinungsbild
+      trackWidth: 9, trackColor: '#141518', showStartFinish: true, showDirection: true,       // Strecke
+      ringShow: true, ringColor: '#CDCDD2', ringWidth: 1.3, ringOpacity: 0.42, ringGlow: false, // Rand
+      showTurns: true, turnSize: 1, turnColor: '#A9A8A3', turnBg: true,                       // Kurven
+      showSectors: true, sectorColor: '', sectorWidth: 2.4, sectorHighlight: false,            // Sektoren ('' = Akzentfarbe)
+      carSize: 1, carLabel: 'pos', classColors: true, carColor: '#E9E7E1', carOutline: true, pitCars: 'dim', // Fahrzeuge
+      leaderShow: true, leaderIcon: 'crown', leaderPerClass: true, leaderColor: '',          // Führender
+      playerColor: '', playerSize: 1.25, playerLabel: 'same', playerGlow: true, playerPulse: false, // ich
+      refShow: false, refColor: '#4CC38A', refStyle: 'ring',                                  // Geist der Bestrunde
+      friends: '', friendColor: '#3DA5FF', friendStyle: 'ring',                               // Freunde
+      nameLabels: 'off', nameNear: 2, nameFormat: 'short', nameSize: 1,                       // Fahrer-Label
+      postPitShow: true, postPitSeconds: 30, postPitColor: '#A06CFF',                         // nach dem Stopp
+      longScale: true, longFrom: 10, longFactor: 0.7,                                         // lange Strecken
+      showWind: false, windPos: 'tr', windSize: 1, windUnit: 'kmh',                           // Wind
+      rotate: 0, mirror: false, align: 'center',                                              // Ausrichtung
+    },
     flags:     { show: 'both' },
     digiflag:  { show: 'both', showGreen: true },
     timer:     { show: 'both', mode: 'auto' },                           // 'auto' | 'time' | 'laps'
@@ -52,6 +69,22 @@
     incidents: 'Incidents', clock: 'Uhrzeit',
   };
   const SHOW = { both: 'Im Auto und in der Box', car: 'Nur im Auto', box: 'Nur in der Box / Replay' };
+
+  // Grundgrösse eines Elements in px (vor dem Zoom); bei «sizable» aus den Optionen
+  function baseSize(type, o) {
+    const t = TYPES[type] || { w: 300, h: 200 };
+    if (t.sizable && o) {
+      const w = Number(o.width), h = Number(o.height);
+      return [w >= 60 ? Math.round(w) : t.w, h >= 60 ? Math.round(h) : t.h];
+    }
+    return [t.w, t.h];
+  }
+  // Session-Filter je Element (inPractice / inQualify / inRace; fehlt = an)
+  const SESSION_KEY = { practice: 'inPractice', qualify: 'inQualify', race: 'inRace' };
+  function sessionAllows(o, category) {
+    const k = SESSION_KEY[category];
+    return !k || !o || o[k] !== false;
+  }
 
   // Ist ein Element bei diesem Zustand sichtbar? inCar: true | false | null (unbekannt)
   function showFor(show, inCar) {
@@ -162,6 +195,6 @@
     return (prefix || 'x') + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
   }
 
-  return { TYPES, OPTIONS, METRICS, GAME_POS, gameTypes, SESSIONS, SHOW, showFor, THEME, PRESETS, normalizeTheme, themeVars, applyTheme, onColor,
+  return { TYPES, OPTIONS, METRICS, GAME_POS, gameTypes, SESSIONS, SHOW, showFor, baseSize, sessionAllows, THEME, PRESETS, normalizeTheme, themeVars, applyTheme, onColor,
     overlayDefaults, gameLayout, widget, streamLayout, sessionCategory, newId };
 });

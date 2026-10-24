@@ -22,8 +22,9 @@ window.OMStream = {
         el.dataset.type = w.type;
         const fr = document.createElement('iframe');
         fr.src = `/overlays/${w.type}.html?stream=${encodeURIComponent(streamId)}&widget=${encodeURIComponent(wid)}${o.preview ? '&mode=preview' : ''}`;
-        fr.width = type.w;
-        fr.height = type.h;
+        const [bw0, bh0] = OMDefaults.baseSize(w.type, w.options);
+        fr.width = bw0;
+        fr.height = bh0;
         fr.setAttribute('tabindex', '-1');
         fr.setAttribute('title', type.title);
         fr.style.cssText = 'border:0;display:block;background:transparent;pointer-events:none;transform-origin:0 0;';
@@ -40,7 +41,9 @@ window.OMStream = {
         el.firstChild.style.transform = 'none';
         continue;
       }
-      el.style.cssText = `position:absolute;left:${w.x}px;top:${w.y}px;width:${Math.round(type.w * w.scale)}px;height:${Math.round(type.h * w.scale)}px;z-index:1;`;
+      const [bw, bh] = OMDefaults.baseSize(w.type, w.options);
+      if (Number(el.firstChild.width) !== bw || Number(el.firstChild.height) !== bh) { el.firstChild.width = bw; el.firstChild.height = bh; }
+      el.style.cssText = `position:absolute;left:${w.x}px;top:${w.y}px;width:${Math.round(bw * w.scale)}px;height:${Math.round(bh * w.scale)}px;z-index:1;`;
       el.firstChild.style.transform = `scale(${w.scale})`;
     }
     for (const el of [...canvas.querySelectorAll('[data-widget]')]) {

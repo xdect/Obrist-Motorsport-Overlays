@@ -62,7 +62,7 @@
           const waiting = f.status === 'waiting';
           document.body.classList.toggle('waiting', waiting);
           // OBS: «Nur im Auto» / «Nur in der Box» (die Spiel-Fenster blendet das Hauptprogramm aus)
-          const allowed = OMDefaults.showFor(this.cfg().show, f.inCar);
+          const allowed = OMDefaults.showFor(this.cfg().show, f.inCar) && OMDefaults.sessionAllows(this.cfg(), f.category);
           document.body.classList.toggle('state-off', mode === 'obs' && !allowed);
           document.body.classList.toggle('state-dim', mode === 'preview' && !allowed); // Vorschau: abgedunkelt statt weg
           handlers.onFrame && handlers.onFrame(f, waiting);
@@ -93,7 +93,6 @@
       g.title = 'Ziehen oder Mausrad: Grösse ändern';
       document.body.appendChild(g);
       this._gripEl = g;
-      const t = OMDefaults.TYPES[overlayId];
       let drag = null, timer = null, pending = null;
       const send = (scale) => {
         pending = Math.round(Math.min(3, Math.max(0.4, scale)) * 100) / 100;
@@ -109,14 +108,15 @@
       g.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         const sc = this.cfg().scale || 1;
-        drag = { x: e.screenX, y: e.screenY, w: t.w * sc, h: t.h * sc };
+        const [bw, bh] = OMDefaults.baseSize(overlayId, this.cfg());
+        drag = { x: e.screenX, y: e.screenY, w: bw * sc, h: bh * sc, bw };
         g.setPointerCapture(e.pointerId);
       });
       g.addEventListener('pointermove', (e) => {
         if (!drag) return;
         const rx = (drag.w + e.screenX - drag.x) / drag.w, ry = (drag.h + e.screenY - drag.y) / drag.h;
         const r = Math.abs(rx - 1) > Math.abs(ry - 1) ? rx : ry;
-        send((drag.w * r) / t.w);
+        send((drag.w * r) / drag.bw);
       });
       const end = () => { drag = null; };
       g.addEventListener('pointerup', end);
