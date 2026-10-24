@@ -22,6 +22,7 @@
   let S = null;              // Einstellungen
   let layoutInfo = null;     // { active, category, editing } vom Core
   let lastStatus = '';
+  let lastCar = undefined;
   const ui = { tab: 'game', layout: null, stream: null, widget: null };
   let renderedLayout = null; // für welches Layout die Karten gerade gebaut sind
   let renderedInspector = '';
@@ -45,7 +46,14 @@
   }
 
   // ---------- Optionen je Overlay-Typ (für Karten und Stream-Inspektor) ----------
+  function showHtml(o) {
+    return `<div class="opt full"><span>Sichtbar</span><select data-k="show">${Object.entries(D.SHOW).map(([k, l]) =>
+      `<option value="${k}" ${(o.show || 'both') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+  }
   function optsHtml(type, o) {
+    return showHtml(o) + typeOptsHtml(type, o);
+  }
+  function typeOptsHtml(type, o) {
     switch (type) {
       case 'relative': return `
         <div class="opt"><span>Autos vor dir <output>${o.carsAhead}</output></span><input type="range" min="1" max="8" value="${o.carsAhead}" data-k="carsAhead"></div>
@@ -78,6 +86,8 @@
     $$('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(S.source === b.dataset.source)));
     $('#demoSession').hidden = S.source !== 'demo';
     $('#demoSession').value = S.demoSession;
+    $('#demoCar').hidden = S.source !== 'demo';
+    $('#demoCar').value = S.demoCar;
     const lock = $('#lockBtn');
     lock.textContent = S.locked ? 'Overlays entsperren' : 'Overlays sperren';
     lock.className = 'btn ' + (S.locked ? '' : 'unlocked');
@@ -87,6 +97,7 @@
   }
   $$('[data-source]').forEach((b) => b.addEventListener('click', () => patch({ source: b.dataset.source })));
   $('#demoSession').addEventListener('change', (e) => patch({ demoSession: e.target.value }));
+  $('#demoCar').addEventListener('change', (e) => patch({ demoCar: e.target.value }));
   $('#lockBtn').addEventListener('click', () => {
     patch({ locked: !S.locked });
     if (S.locked && lastStatus === 'waiting' && !S.editLayout) toast('Ohne Session sind die Overlays ausgeblendet. Zum Verschieben «Auf dem Bildschirm positionieren» nutzen.');
@@ -98,13 +109,17 @@
     try { localStorage.setItem('om.tab', t); } catch { /* egal */ }
     $('#tab-game').setAttribute('aria-selected', String(t === 'game'));
     $('#tab-stream').setAttribute('aria-selected', String(t === 'stream'));
+    $('#tab-colors').setAttribute('aria-selected', String(t === 'colors'));
     $('#pane-game').hidden = t !== 'game';
     $('#pane-stream').hidden = t !== 'stream';
+    $('#pane-colors').hidden = t !== 'colors';
+    if (t === 'colors') renderColors();
     if (t === 'stream') requestAnimationFrame(fitStage);
     else requestAnimationFrame(fitPreviews);
   }
   $('#tab-game').addEventListener('click', () => showTab('game'));
   $('#tab-stream').addEventListener('click', () => showTab('stream'));
+  $('#tab-colors').addEventListener('click', () => showTab('colors'));
 
   // ================= Im Spiel =================
   const layoutIds = () => Object.keys(S.layouts);
@@ -206,7 +221,7 @@
           <label class="switch"><input type="checkbox" data-k="enabled" ${o.enabled ? 'checked' : ''}><span>Anzeigen</span></label></div>
         <div class="opts">
           <div class="opt full" style="color:var(--mist);font-size:13.5px;line-height:1.35">${INFO[type]}</div>
-          <div class="opt"><span>Grösse <output>${Math.round(o.scale * 100)}</output> %</span><input type="range" min="0.6" max="2" step="0.05" value="${o.scale}" data-k="scale"></div>
+          <div class="opt"><span>Grösse <output>${Math.round(o.scale * 100)}</output> %</span><input type="range" min="0.4" max="3" step="0.05" value="${o.scale}" data-k="scale"></div>
           <div class="opt"><span>Deckkraft <output>${Math.round(o.opacity * 100)}</output> %</span><input type="range" min="0.3" max="1" step="0.02" value="${o.opacity}" data-k="opacity"></div>
           ${optsHtml(type, o)}
         </div>
@@ -295,6 +310,7 @@
     stageScale = stage.parentElement.clientWidth / s.width;
     stage.style.height = Math.round(s.height * stageScale) + 'px';
     $('#canvas').style.transform = `scale(${stageScale})`;
+    $('#canvas').style.setProperty('--inv', String(1 / stageScale));
   }
   window.addEventListener('resize', () => { fitStage(); fitPreviews(); });
 
@@ -361,6 +377,43 @@
     return { x, y };
   }
   function decorate(el, wid) {
+    // Griff rechts unten: ziehen ändert die Grösse (Seitenverhältnis bleibt)
+    const h = document.createElement('div');
+    h.className = 'resize-h';
+    h.title = 'Ziehen: Grösse ändern';
+    el.appendChild(h);
+    let rs = null;
+    h.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if (e.button !== 0) return;
+      const w = S.streams[ui.stream].widgets[wid];
+      rs = { sx: e.clientX, sy: e.clientY, scale: w.scale, t: D.TYPES[w.type] };
+      h.setPointerCapture(e.pointerId);
+    });
+    h.addEventListener('pointermove', (e) => {
+      if (!rs) return;
+      const s = S.streams[ui.stream], w = s.widgets[wid];
+      const bw = rs.t.w * rs.scale, bh = rs.t.h * rs.scale;
+      const rx = (bw + (e.clientX - rs.sx) / stageScale) / bw, ry = (bh + (e.clientY - rs.sy) / stageScale) / bh;
+      let sc = rs.scale * (Math.abs(rx - 1) > Math.abs(ry - 1) ? rx : ry);
+      // nicht über den Rand der Leinwand hinaus
+      sc = Math.min(sc, (s.width - w.x) / rs.t.w, (s.height - w.y) / rs.t.h, 3);
+      sc = Math.round(Math.max(0.3, sc) * 100) / 100;
+      w.scale = sc;
+      el.style.width = Math.round(rs.t.w * sc) + 'px';
+      el.style.height = Math.round(rs.t.h * sc) + 'px';
+      el.firstChild.style.transform = `scale(${sc})`;
+      const r = $('#inspector input[data-k="scale"]');
+      if (r) { r.value = sc; showOutput(r, sc); }
+    });
+    const rsEnd = () => {
+      if (!rs) return;
+      rs = null;
+      patch({ streams: { [ui.stream]: { widgets: { [wid]: { scale: S.streams[ui.stream].widgets[wid].scale } } } } });
+    };
+    h.addEventListener('pointerup', rsEnd);
+    h.addEventListener('pointercancel', rsEnd);
+
     el.tabIndex = 0;
     el.setAttribute('role', 'button');
     el.setAttribute('aria-label', `${D.TYPES[el.dataset.type].title} – ziehen zum Verschieben`);
@@ -478,6 +531,61 @@
   // Klick ins Leere hebt die Auswahl auf
   $('#stage').addEventListener('pointerdown', (e) => { if (!e.target.closest('.om-widget')) select(null); });
 
+  // ================= Farben =================
+  const COLOR_FIELDS = [
+    ['accent', 'Akzentfarbe', 'Tabs, eigene Zeile, Markierungen'],
+    ['panel', 'Hintergrund', 'Fläche der Overlays'],
+    ['text', 'Text', 'Namen und Zahlen'],
+    ['gain', 'Schneller', 'Zeitgewinn, Gas'],
+    ['loss', 'Langsamer', 'Zeitverlust, Bremse'],
+  ];
+  // Hauptfenster: nur die Akzentfarbe übernehmen (das Fenster bleibt dunkel)
+  function applyAccent() {
+    const v = D.themeVars(S.theme);
+    const root = document.documentElement.style;
+    root.setProperty('--gold', v['--gold']);
+    root.setProperty('--accent-rgb', v['--accent-rgb']);
+    root.setProperty('--on-accent', v['--on-accent']);
+    root.setProperty('--gold-pale', D.themeVars({ ...S.theme, panel: '#16171A' })['--gold-pale']);
+  }
+  const themeEq = (a, b) => Object.keys(D.THEME).every((k) => (a[k] || '').toUpperCase() === (b[k] || '').toUpperCase());
+  function renderColors() {
+    if (!S) return;
+    const t = S.theme;
+    $('#presets').innerHTML = D.PRESETS.map((p, i) => {
+      const full = { ...D.THEME, ...p };
+      return `<button class="preset" data-preset="${i}" aria-pressed="${themeEq(full, t)}"><i style="background:${full.accent}"></i>${esc(p.name)}</button>`;
+    }).join('');
+    const box = $('#colorFields');
+    if (!box.children.length) {
+      box.innerHTML = COLOR_FIELDS.map(([k, label, hint]) =>
+        `<label class="color-field"><input type="color" data-color="${k}"><span>${label}<small>${hint}</small></span></label>`).join('');
+    }
+    for (const [k] of COLOR_FIELDS) {
+      const inp = $(`input[data-color="${k}"]`, box);
+      if (document.activeElement !== inp) inp.value = t[k].toLowerCase();
+    }
+    const pv = $('#themePreview');
+    if (!pv.children.length) {
+      const L = (layoutInfo && layoutInfo.active) || Object.keys(S.layouts)[0];
+      pv.innerHTML = ['relative', 'delta', 'fuel'].map((type) => {
+        const tt = D.TYPES[type], sc = 0.85;
+        return `<div class="fr" style="width:${Math.round(tt.w * sc)}px;height:${Math.round(tt.h * sc)}px"><iframe src="/overlays/${type}.html?mode=preview&layout=${encodeURIComponent(L)}" width="${tt.w}" height="${tt.h}" style="transform:scale(${sc})" tabindex="-1" title="Vorschau ${tt.title}"></iframe></div>`;
+      }).join('');
+    }
+  }
+  $('#presets').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-preset]');
+    if (!b) return;
+    const p = D.PRESETS[Number(b.dataset.preset)];
+    patch({ theme: { ...D.THEME, ...p, name: undefined } });
+  });
+  $('#colorFields').addEventListener('input', (e) => {
+    const k = e.target.dataset.color;
+    if (k) patchSoon('color-' + k, { theme: { [k]: e.target.value.toUpperCase() } }, 80);
+  });
+  $('#themeReset').addEventListener('click', () => patch({ theme: { ...D.THEME } }));
+
   // ---------- Gemeinsam ----------
   function ensureSelection() {
     if (!S.layouts[ui.layout]) ui.layout = (layoutInfo && S.layouts[layoutInfo.active]) ? layoutInfo.active : layoutIds()[0];
@@ -486,7 +594,9 @@
   function refresh() {
     if (!S) return;
     ensureSelection();
+    applyAccent();
     renderHeader();
+    if (ui.tab === 'colors') renderColors();
     renderAssign();
     renderLayoutChips();
     renderLayoutToolbar();
@@ -557,11 +667,13 @@
       if (S) { renderAssign(); }
     },
     frame(f) {
-      if (f.status === lastStatus) return;
+      if (f.status === lastStatus && f.inCar === lastCar) return;
       lastStatus = f.status;
+      lastCar = f.inCar;
       const el = $('#status');
       el.className = 'status ' + f.status;
-      $('span', el).textContent = STATUS[f.status] || f.status;
+      const where = f.status === 'waiting' || f.inCar === null || f.inCar === undefined ? '' : f.inCar ? ' – im Auto' : ' – in der Box';
+      $('span', el).textContent = (STATUS[f.status] || f.status) + where;
       if (S) { renderAssign(); $('#demoHint').hidden = lastStatus !== 'waiting'; }
     },
     close() { const el = $('#status'); el.className = 'status'; $('span', el).textContent = 'Keine Verbindung zum Core'; lastStatus = ''; },

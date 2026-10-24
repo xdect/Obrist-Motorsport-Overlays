@@ -3,6 +3,14 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.4.0
+
+- Erkennt, ob du im Auto sitzt oder in der Box, Garage oder im Replay bist
+- Für jedes Element wählbar: «Im Auto und in der Box», «Nur im Auto» oder «Nur in der Box / Replay» – im Spiel und im Stream
+- Grösse direkt ändern: Griff rechts unten im Positionieren-Modus (ziehen oder Mausrad), Eck-Griff im Stream-Editor; 40–300 %
+- Neuer Reiter «Farben»: Vorlagen und eigene Farben für Akzent, Hintergrund, Text, schneller und langsamer, mit Live-Vorschau
+- Im Stream-Editor sind Elemente, die gerade ausgeblendet wären, abgedunkelt
+
 ## 1.3.1
 
 - Behoben: Ein Update konnte die installierte Version beschädigen, sodass OM Overlays nicht mehr startete

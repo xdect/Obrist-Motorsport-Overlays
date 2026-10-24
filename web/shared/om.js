@@ -59,6 +59,10 @@
           this.frame = f;
           const waiting = f.status === 'waiting';
           document.body.classList.toggle('waiting', waiting);
+          // OBS: «Nur im Auto» / «Nur in der Box» (die Spiel-Fenster blendet das Hauptprogramm aus)
+          const allowed = OMDefaults.showFor(this.cfg().show, f.inCar);
+          document.body.classList.toggle('state-off', mode === 'obs' && !allowed);
+          document.body.classList.toggle('state-dim', mode === 'preview' && !allowed); // Vorschau: abgedunkelt statt weg
           handlers.onFrame && handlers.onFrame(f, waiting);
         },
         close: () => document.body.classList.add('waiting'),
@@ -68,12 +72,57 @@
     _applySettings() {
       const c = this.cfg();
       const root = document.documentElement.style;
+      OMDefaults.applyTheme(this.settings.theme, document.documentElement);
       // Einzelne OBS-Quelle: Deckkraft/Skalierung per URL übersteuerbar (?opacity=0.8&scale=1.2)
       const op = params.has('opacity') ? Number(params.get('opacity')) : c.opacity;
       if (op !== undefined) root.setProperty('--panel-alpha', String(op));
       const scale = params.has('scale') ? Number(params.get('scale')) : (mode === 'window' ? c.scale : 1);
       document.body.style.zoom = String(scale || 1);
-      document.body.classList.toggle('edit', mode === 'window' && this.settings.locked === false);
+      const editing = mode === 'window' && this.settings.locked === false;
+      document.body.classList.toggle('edit', editing);
+      if (editing) this._grip();
+    },
+
+    // Griff unten rechts im Positionieren-Modus: ziehen oder Mausrad ändert die Grösse
+    _grip() {
+      if (this._gripEl) return;
+      const g = document.createElement('div');
+      g.className = 'om-grip';
+      g.title = 'Ziehen oder Mausrad: Grösse ändern';
+      document.body.appendChild(g);
+      this._gripEl = g;
+      const t = OMDefaults.TYPES[overlayId];
+      let drag = null, timer = null, pending = null;
+      const send = (scale) => {
+        pending = Math.round(Math.min(3, Math.max(0.4, scale)) * 100) / 100;
+        if (timer) return;
+        timer = setTimeout(() => {
+          timer = null;
+          const lid = this.layoutInfo && this.layoutInfo.active;
+          if (!lid) return;
+          fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layouts: { [lid]: { overlays: { [overlayId]: { scale: pending } } } } }) });
+        }, 60);
+      };
+      g.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        const sc = this.cfg().scale || 1;
+        drag = { x: e.screenX, y: e.screenY, w: t.w * sc, h: t.h * sc };
+        g.setPointerCapture(e.pointerId);
+      });
+      g.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        const rx = (drag.w + e.screenX - drag.x) / drag.w, ry = (drag.h + e.screenY - drag.y) / drag.h;
+        const r = Math.abs(rx - 1) > Math.abs(ry - 1) ? rx : ry;
+        send((drag.w * r) / t.w);
+      });
+      const end = () => { drag = null; };
+      g.addEventListener('pointerup', end);
+      g.addEventListener('pointercancel', end);
+      g.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        send((pending !== null && timer ? pending : (this.cfg().scale || 1)) * (e.deltaY < 0 ? 1.05 : 1 / 1.05));
+      }, { passive: false });
     },
 
     header(el, title, metaHtml) {
@@ -102,6 +151,9 @@
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = Math.floor(s % 60);
     return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
   };
+  // aktuelle Farbe aus dem Farbschema (für Zeichnungen auf <canvas>)
+  OM.css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  OM.alpha = (name, a) => { const v = OM.css(name); return /^#[0-9a-f]{6}$/i.test(v) ? v + Math.round(a * 255).toString(16).padStart(2, '0') : v; };
   OM.ir = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n || ''));
   OM.waitingText = 'Wartet auf iRacing. Sobald du in einer Session sitzt, erscheinen hier die Daten.';
 

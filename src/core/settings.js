@@ -17,6 +17,7 @@ function defaults() {
   return {
     source: 'auto',      // 'auto' = iRacing, sobald es läuft | 'demo'
     demoSession: 'race', // Session-Art im Demo-Modus: practice | qualify | race
+    demoCar: 'car',      // Demo: 'car' = im Auto, 'box' = in der Box
     locked: true,        // gesperrt = Klicks gehen durch zu iRacing
     autostart: false,    // mit Windows starten (im Hintergrund)
     autoUpdate: true,    // automatisch nach Updates suchen
@@ -79,6 +80,8 @@ function normalize(input) {
   for (const k of Object.keys(D.SESSIONS)) data.gameAssign[k] = layouts[ga[k]] ? ga[k] : ids[0];
   if (data.editLayout && !layouts[data.editLayout]) data.editLayout = null;
   if (!D.SESSIONS[data.demoSession]) data.demoSession = 'race';
+  if (data.demoCar !== 'box') data.demoCar = 'car';
+  data.theme = D.normalizeTheme(data.theme);
 
   // Stream-Overlays (beim ersten Start ein Beispiel anlegen; leer bleibt leer)
   const streams = data.streams === undefined ? { s1: defaultStream() } : clean(data.streams);

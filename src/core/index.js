@@ -25,6 +25,22 @@ const iracing = new IRacingSource();
 let status = 'waiting';
 let category = null;       // zuletzt erkannte Session-Art (bleibt beim Warten erhalten)
 let layoutKey = '';
+// Im Auto oder in der Box? Erst nach kurzer stabiler Phase umschalten (Reset, Abschleppen, Kamerawechsel)
+const CAR_STABLE_MS = 700;
+let inCar = null;
+let carCandidate = null;
+let carSince = 0;
+function updateCarState(raw, now) {
+  // Im Auto = Fahrphysik läuft mit dir am Steuer und kein Replay. Alles andere (Box/Garage,
+  // Replay, Zuschauen, Ladebildschirm) gilt als «in der Box».
+  const next = raw ? (!!raw.car.onTrack && !raw.car.replay) : null;
+  if (next === null) { if (inCar !== null) toParent({ type: 'car', inCar: null }); inCar = null; carCandidate = null; return; }
+  if (next !== carCandidate) { carCandidate = next; carSince = now; }
+  if (inCar === null || (next !== inCar && now - carSince >= CAR_STABLE_MS)) {
+    if (inCar !== next) toParent({ type: 'car', inCar: next });
+    inCar = next;
+  }
+}
 const DEMO_TYPES = { practice: 'Practice', qualify: 'Lone Qualify', race: 'Race' };
 
 // Aktives Spiel-Layout bestimmen und bei Änderung an Hauptprozess und Anzeigen melden
@@ -80,6 +96,7 @@ async function loop() {
       demo.step(dt);
       raw = demo.read();
       raw.session.type = DEMO_TYPES[s.demoSession] || 'Race';
+      raw.car.onTrack = s.demoCar !== 'box';
       recorder.setStatic(raw.trackPath);
     } else {
       demo = null;
@@ -91,6 +108,8 @@ async function loop() {
     }
 
     const frame = engine.frame(raw, s, { recording: recorder.recording, progress: recorder.progress });
+    updateCarState(raw, now);
+    frame.inCar = inCar;
     if (frame.category) category = frame.category;
     syncLayout();
     if (frame.status !== status) { status = frame.status; toParent({ type: 'status', status }); }

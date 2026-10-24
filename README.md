@@ -74,6 +74,22 @@ sofort in OBS.
 Einzelne Overlays gehen weiterhin als eigene Quelle
 (`http://127.0.0.1:7913/overlays/relative.html`); sie folgen dann dem aktiven Spiel-Layout.
 
+## Im Auto oder in der Box
+
+OM Overlays erkennt, ob du im Auto sitzt oder in der Box, Garage, im Replay bzw. beim Zuschauen
+bist. Bei jedem Element (Karte im Reiter «Im Spiel», Inspektor im Stream-Editor) wählst du unter
+**Sichtbar**: «Im Auto und in der Box», «Nur im Auto» oder «Nur in der Box / Replay».
+Beim Positionieren sind immer alle Overlays sichtbar; im Stream-Editor sind gerade
+ausgeblendete Elemente abgedunkelt.
+
+## Grösse und Farben
+
+- **Im Spiel:** im Positionieren-Modus am Griff rechts unten eines Overlays ziehen oder dort
+  das Mausrad drehen. Alternativ der Grössen-Schieber auf der Karte (40–300 %).
+- **Im Stream:** Element anklicken und am Eck-Griff ziehen.
+- **Farben:** Reiter «Farben» – Vorlagen (OM Gold, Rennrot, Papaya, Petrol, Eisblau, Violett,
+  Silber, Hell) oder eigene Farben für Akzent, Hintergrund, Text, schneller und langsamer.
+
 ## Updates
 
 OM Overlays sucht beim Start und danach alle 6 Stunden auf GitHub

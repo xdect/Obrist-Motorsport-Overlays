@@ -72,12 +72,12 @@
     const path = () => { ctx.beginPath(); proj.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); };
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     path(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 9; ctx.stroke();
-    path(); ctx.strokeStyle = OM.track ? 'rgba(242,240,234,0.75)' : 'rgba(242,240,234,0.18)'; ctx.lineWidth = 3.5; ctx.stroke();
+    path(); ctx.strokeStyle = OM.alpha('--chalk', OM.track ? 0.75 : 0.18); ctx.lineWidth = 3.5; ctx.stroke();
 
     // Start/Ziel
     const s0 = at(0), s1 = at(0.004);
     const ang = Math.atan2(s1[1] - s0[1], s1[0] - s0[0]) + Math.PI / 2;
-    ctx.strokeStyle = '#C8A24C'; ctx.lineWidth = 3;
+    ctx.strokeStyle = OM.css('--gold'); ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(s0[0] + Math.cos(ang) * 8, s0[1] + Math.sin(ang) * 8);
     ctx.lineTo(s0[0] - Math.cos(ang) * 8, s0[1] - Math.sin(ang) * 8);
@@ -93,16 +93,16 @@
       const [x, y] = at(c.pct);
       ctx.globalAlpha = c.pit ? 0.35 : 1;
       if (c.me) {
-        ctx.fillStyle = '#C8A24C';
+        ctx.fillStyle = OM.css('--gold');
         ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-        ctx.fillStyle = '#16171A'; ctx.font = '700 10.5px Bahnschrift, "Barlow Semi Condensed", sans-serif';
+        ctx.fillStyle = OM.css('--on-accent'); ctx.font = '700 10.5px Bahnschrift, "Barlow Semi Condensed", sans-serif';
         ctx.fillText(c.number, x, y + 0.5);
         ctx.font = '600 10px Bahnschrift, "Barlow Semi Condensed", sans-serif';
       } else {
         ctx.fillStyle = '#ECEAE4';
         ctx.beginPath(); ctx.arc(x, y, showNum ? 7.5 : 4.5, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = c.color || '#C8A24C'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.strokeStyle = c.color && c.color[0] === '#' ? c.color : OM.css('--gold'); ctx.lineWidth = 1.5; ctx.stroke();
         if (showNum) { ctx.fillStyle = '#16171A'; ctx.fillText(c.number, x, y + 0.5); }
       }
       ctx.globalAlpha = 1;

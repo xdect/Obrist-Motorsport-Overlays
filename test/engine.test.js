@@ -108,3 +108,27 @@ test('Session-Arten erkennen', () => {
   assert.strictEqual(sessionCategory('Offline Testing'), 'practice');
   assert.strictEqual(sessionCategory(''), null);
 });
+
+test('Sichtbarkeit im Auto / in der Box und Farbschema', () => {
+  const D = require('../web/shared/defaults');
+  const { normalize } = require('../src/core/settings');
+  assert.strictEqual(D.showFor('both', true), true);
+  assert.strictEqual(D.showFor('car', true), true);
+  assert.strictEqual(D.showFor('car', false), false);
+  assert.strictEqual(D.showFor('box', false), true);
+  assert.strictEqual(D.showFor('box', true), false);
+  assert.strictEqual(D.showFor('car', null), true); // unbekannt → zeigen
+  const s = normalize({});
+  assert.strictEqual(s.layouts.standard.overlays.delta.show, 'both');
+  const w = Object.values(s.streams.s1.widgets)[0];
+  assert.strictEqual(w.options.show, 'both');
+  assert.deepStrictEqual(s.theme, D.THEME);
+  const s2 = normalize({ theme: { accent: '#4da3ff', panel: 'kaputt' } });
+  assert.strictEqual(s2.theme.accent, '#4DA3FF');
+  assert.strictEqual(s2.theme.panel, D.THEME.panel);
+  const v = D.themeVars(s2.theme);
+  assert.strictEqual(v['--accent-rgb'], '77, 163, 255');
+  assert.strictEqual(v['--on-accent'], '#16171A');
+  assert.strictEqual(D.themeVars({ accent: '#D7263D' })['--on-accent'], '#FFFFFF');
+  assert.strictEqual(normalize({ demoCar: 'irgendwas' }).demoCar, 'car');
+});

@@ -10,7 +10,7 @@ const yaml = require('../yaml-lite');
 
 const VARS = [
   'SessionInfoUpdate', 'SessionNum', 'SessionTime', 'SessionTimeRemain', 'SessionLapsRemainEx', 'SessionFlags',
-  'PlayerCarIdx', 'IsOnTrack', 'OnPitRoad',
+  'PlayerCarIdx', 'IsOnTrack', 'IsInGarage', 'IsReplayPlaying', 'OnPitRoad',
   'CarIdxLapDistPct', 'CarIdxLap', 'CarIdxLapCompleted', 'CarIdxPosition', 'CarIdxClassPosition',
   'CarIdxLastLapTime', 'CarIdxBestLapTime', 'CarIdxEstTime', 'CarIdxF2Time', 'CarIdxOnPitRoad', 'CarIdxTrackSurface',
   'FuelLevel', 'Lap', 'LapCompleted', 'LapDistPct', 'LapCurrentLapTime', 'LapLastLapTime', 'LapBestLapTime',
@@ -225,6 +225,8 @@ class IRacingSource {
         vy: num('VelocityY'),
         yaw: num('Yaw'),
         onTrack: bool('IsOnTrack'),
+        inGarage: bool('IsInGarage'),
+        replay: bool('IsReplayPlaying'),
       },
       drivers,
       cars,

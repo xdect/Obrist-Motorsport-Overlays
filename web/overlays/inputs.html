@@ -69,9 +69,9 @@
       });
       ctx.stroke();
     };
-    line('s', 'rgba(242,240,234,0.35)', 1.5);   // Lenkung (Mitte = gerade)
-    line('t', '#4CC38A', 2);
-    line('b', '#E0463A', 2);
+    line('s', OM.alpha('--chalk', 0.35), 1.5);   // Lenkung (Mitte = gerade)
+    line('t', OM.css('--gain'), 2);
+    line('b', OM.css('--loss'), 2);
   }
 
   OM.connect({

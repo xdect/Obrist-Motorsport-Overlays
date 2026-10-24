@@ -268,7 +268,7 @@ class DemoSource {
         onTrack: true,
       },
       drivers: this.cars.map((c) => ({
-        idx: c.idx, name: c.name, abbrev: '', number: c.number, classId: 1, className: 'GT3', classColor: '#c8a24c',
+        idx: c.idx, name: c.name, abbrev: '', number: c.number, classId: 1, className: 'GT3', classColor: 'var(--gold)', // Demo: Klassenfarbe = Akzentfarbe
         classEstLap: ref, iRating: c.iRating, license: c.license, safety: c.safety, licColor: '#0153db', carName: c.carName,
       })),
       cars,

@@ -5,6 +5,8 @@
   --carbon: 22, 23, 26;          /* #16171A Panel */
   --graphite: #24262B;           /* Zeilen, Flächen */
   --rule: rgba(255, 255, 255, 0.07);
+  --accent-rgb: 200, 162, 76;
+  --on-accent: #16171A;          /* Schrift auf Akzentfarbe (wird je nach Farbschema gesetzt) */
   --gold: #C8A24C;
   --gold-pale: #E6CC86;
   --chalk: #F2F0EA;              /* Zahlen und Namen */
@@ -45,13 +47,13 @@ body {
   display: flex; align-items: stretch;
   height: 24px;
   background: rgba(0,0,0,0.35);
-  border-bottom: 1px solid rgba(200, 162, 76, 0.35);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 .om-tab {
   display: flex; align-items: center; gap: 5px;
   padding: 0 calc(var(--slant) + 8px) 0 8px;
   background: var(--gold);
-  color: #16171A;
+  color: var(--on-accent);
   font-family: var(--font-wide);
   font-weight: 700;
   font-size: 13px;
@@ -86,7 +88,7 @@ body {
 }
 .row:first-child { border-top: 0; }
 .row.me {
-  background: linear-gradient(90deg, rgba(200,162,76,0.28), rgba(200,162,76,0.08) 70%);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.28), rgba(var(--accent-rgb), 0.08) 70%);
 }
 .row.me::before { /* Gold-Schräge links, Echo des Kopf-Tabs */
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14px;
@@ -105,7 +107,7 @@ body {
   font-weight: 700; font-size: 13px;
   border-left: 3px solid var(--cls, var(--gold));
 }
-.me .num { background: var(--gold); border-left-color: #fff; }
+.me .num { background: var(--gold); color: var(--on-accent); border-left-color: var(--chalk); }
 .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; padding-right: 6px; }
 .me .name { font-weight: 700; }
 .sub { color: var(--mist); font-size: 12.5px; white-space: nowrap; }
@@ -116,7 +118,7 @@ body {
 }
 .time { text-align: right; white-space: nowrap; }
 .pit {
-  font-size: 10.5px; font-weight: 700; color: #16171A; background: var(--chalk);
+  font-size: 10.5px; font-weight: 700; color: rgb(var(--carbon)); background: var(--chalk);
   padding: 2px 4px; border-radius: 2px; justify-self: start;
 }
 .lapping .name, .lapping .time { color: var(--lapping); }
@@ -129,13 +131,23 @@ body {
 .empty {
   padding: 14px 12px; color: var(--mist); font-size: 14px; line-height: 1.35;
 }
-body.obs.waiting .panel { opacity: 0; }
+body.obs.waiting .panel, body.obs.state-off .panel { opacity: 0; }
+body.preview.state-dim .panel { opacity: 0.3; }
 
 /* Bearbeiten-Modus im Overlay-Fenster: ziehen zum Verschieben */
 body.edit { -webkit-app-region: drag; cursor: move; }
 body.edit .panel { outline: 2px dashed var(--gold); outline-offset: 1px; }
 body.edit::after {
-  content: "Ziehen zum Verschieben. Sperren mit Strg+Umschalt+L";
-  position: fixed; right: 8px; bottom: 6px;
-  font-size: 11px; color: #16171A; background: var(--gold); padding: 3px 6px; border-radius: 2px;
+  content: "Ziehen verschiebt, Griff rechts unten ändert die Grösse";
+  position: fixed; left: 8px; bottom: 6px;
+  font-size: 11px; color: var(--on-accent); background: var(--gold); padding: 3px 6px; border-radius: 2px;
+  pointer-events: none;
+}
+/* Grössen-Griff (nur im Positionieren-Modus) */
+.om-grip { display: none; }
+body.edit .om-grip {
+  display: block; position: fixed; right: 2px; bottom: 2px; width: 22px; height: 22px;
+  -webkit-app-region: no-drag; cursor: nwse-resize; z-index: 10;
+  background: linear-gradient(135deg, transparent 0 45%, var(--gold) 45% 55%, transparent 55% 65%, var(--gold) 65% 75%, transparent 75%);
+  border-radius: 0 0 3px 0;
 }

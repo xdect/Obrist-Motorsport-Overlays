@@ -10,6 +10,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, screen, globalShortcut, dia
 const { fork } = require('child_process');
 const path = require('path');
 const { Updater, feedUrl } = require('./updater');
+const { showFor } = require('../../web/shared/defaults');
 const pkg = require('../../package.json');
 
 const BASE = {
@@ -29,6 +30,7 @@ const windows = new Map();   // id → BrowserWindow
 let hiddenAll = false;       // manuell ausgeblendet (Strg+Umschalt+H / Tray)
 let status = 'waiting';      // vom Core: 'live' | 'demo' | 'waiting'
 let layoutInfo = { active: null, category: null, editing: false }; // aktives Spiel-Layout vom Core
+let inCar = null;            // vom Core: true = im Auto, false = Box/Garage/Replay, null = unbekannt
 let overlaysVisible = false;
 let hideTimer = null;
 let quitting = false;
@@ -69,6 +71,11 @@ function startCore() {
       dbg('Layout', layoutInfo);
       if (changed) syncWindows();
       applyVisibility();
+      updateTray();
+    } else if (msg.type === 'car') {
+      inCar = msg.inCar;
+      dbg('im Auto:', inCar);
+      setOverlaysVisible(overlaysVisible);
       updateTray();
     } else if (msg.type === 'status') {
       setStatus(msg.status);
@@ -225,7 +232,8 @@ function layoutLabel() {
   const cat = { practice: 'Training', qualify: 'Qualifying', race: 'Rennen' }[layoutInfo.category];
   if (!l) return 'Layout: –';
   if (layoutInfo.editing) return `Layout «${l.name}» wird positioniert`;
-  return `Layout: ${l.name}${cat ? ` (${cat})` : ''}`;
+  const where = inCar === true ? ', im Auto' : inCar === false ? ', in der Box' : '';
+  return `Layout: ${l.name}${cat ? ` (${cat}${where})` : ''}`;
 }
 
 function updateMenuItem() {
@@ -297,13 +305,21 @@ function applyVisibility() {
   }
 }
 
+// Darf dieses Overlay gerade erscheinen? (Einstellung «Nur im Auto» / «Nur in der Box»)
+function carAllows(id) {
+  if (layoutInfo.editing) return true; // beim Positionieren immer alle zeigen
+  const o = currentOverlays()[id];
+  return showFor(o && o.show, inCar);
+}
+
 function setOverlaysVisible(v) {
-  dbg('overlays sichtbar:', v);
+  if (v !== overlaysVisible) dbg('overlays sichtbar:', v);
   overlaysVisible = v;
-  for (const w of windows.values()) {
+  for (const [id, w] of windows) {
     if (w.isDestroyed() || !w.omReady) continue;
-    if (v && !w.isVisible()) w.showInactive();
-    else if (!v && w.isVisible()) w.hide();
+    const want = v && carAllows(id);
+    if (want && !w.isVisible()) w.showInactive();
+    else if (!want && w.isVisible()) w.hide();
   }
 }
 
@@ -339,7 +355,7 @@ function createOverlay(id) {
     win.omReady = true;
     dbg('bereit', id, 'sichtbar?', overlaysVisible, win.isVisible());
     applyLock(win);
-    if (overlaysVisible) win.showInactive();
+    if (overlaysVisible && carAllows(id)) win.showInactive();
   });
   win.on('moved', () => savePosition(id, win));
   win.on('move', () => savePosition(id, win));
@@ -385,6 +401,7 @@ function syncWindows() {
     }
     applyLock(win);
   }
+  setOverlaysVisible(overlaysVisible);
 }
 
 function handleCommand(cmd) {
