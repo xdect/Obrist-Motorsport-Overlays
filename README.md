@@ -33,11 +33,16 @@ immer sichtbar (zum Positionieren).
 
 1. **iRacing im randlosen Fenstermodus** starten (Optionen → Grafik → Fenstermodus/Borderless).
    Im exklusiven Vollbild liegen keine Fenster darüber – das gilt für alle Overlay-Tools.
-2. Im Control Panel oben **iRacing** als Datenquelle wählen. Der Status springt auf
+2. Unten rechts **iRacing** als Datenquelle wählen. Der Status oben rechts springt auf
    «iRacing verbunden», sobald du in einer Session sitzt.
-3. Pro Overlay **Im Spiel** einschalten, Grösse und Deckkraft einstellen.
-4. **Overlays entsperren**, Fenster an ihren Platz ziehen, wieder **sperren**. Gesperrt gehen alle
-   Klicks durch zu iRacing. Positionen werden gespeichert. Ohne Session dafür auf **Demo** wechseln.
+3. Unter **Overlays** die gewünschten Karten auf **An** stellen. Klick auf eine Karte öffnet
+   ihre Einstellungen (Grösse, Deckkraft, Sichtbar, Optionen).
+4. Unten auf **Positionieren** klicken, Overlays an ihren Platz ziehen, dann **Fertig positioniert**.
+   Gesperrt (Schloss unten links) gehen alle Klicks durch zu iRacing.
+
+**Aufbau des Hauptfensters:** Oben die Bereiche Start, Overlays, Stream, Farben und Einstellungen.
+Links die Seitenleiste mit allen Elementen (gelber Punkt = im Layout aktiv) und den Layouts.
+Unten die Fussleiste mit Sperre, Positionieren samt Layout-Auswahl und der Datenquelle.
 
 **Tastenkürzel** (auch über Stream Deck → Hotkey):
 
@@ -51,17 +56,17 @@ Ring mit dir auf P5. Ideal zum Positionieren und für die OBS-Einrichtung.
 
 ## Layouts (im Spiel)
 
-Im Reiter **Im Spiel** legst du beliebig viele Layouts an. Ein Layout bestimmt, welche Overlays
+Im Bereich **Overlays** legst du beliebig viele Layouts an (Seitenleiste → «Neues Layout»). Ein Layout bestimmt, welche Overlays
 über iRacing erscheinen, wo sie stehen, wie gross sie sind und mit welchen Optionen.
-Oben wählst du je ein Layout für **Training**, **Qualifying** und **Rennen**. OM Overlays
+Auf der Startseite wählst du je ein Layout für **Training**, **Qualifying** und **Rennen**. OM Overlays
 wechselt automatisch, sobald iRacing die Session wechselt.
 
-**Auf dem Bildschirm positionieren** zeigt das gewählte Layout sofort an, auch ohne iRacing.
+**Positionieren** (Fussleiste) zeigt das gewählte Layout sofort an, auch ohne iRacing.
 Overlays an ihren Platz ziehen, dann **Fertig positioniert**.
 
 ## Stream-Overlays (OBS)
 
-Im Reiter **Stream** baust du ganze Szenen für OBS: eine Leinwand in der Grösse deines Streams
+Im Bereich **Stream** baust du ganze Szenen für OBS: eine Leinwand in der Grösse deines Streams
 (z. B. 2560 × 1440), auf der du Relative, Standings, Fuel usw. frei platzierst. Ziehen
 verschiebt ein Element (mit Umschalttaste in 10er-Schritten), Pfeiltasten pixelgenau,
 Entf entfernt es. Rechts stellst du Grösse, Deckkraft und Optionen ein.
@@ -77,7 +82,7 @@ Einzelne Overlays gehen weiterhin als eigene Quelle
 ## Im Auto oder in der Box
 
 OM Overlays erkennt, ob du im Auto sitzt oder in der Box, Garage, im Replay bzw. beim Zuschauen
-bist. Bei jedem Element (Karte im Reiter «Im Spiel», Inspektor im Stream-Editor) wählst du unter
+bist. Bei jedem Element (Detailseite unter «Overlays», Inspektor im Stream-Editor) wählst du unter
 **Sichtbar**: «Im Auto und in der Box», «Nur im Auto» oder «Nur in der Box / Replay».
 Beim Positionieren sind immer alle Overlays sichtbar; im Stream-Editor sind gerade
 ausgeblendete Elemente abgedunkelt.
@@ -85,9 +90,9 @@ ausgeblendete Elemente abgedunkelt.
 ## Grösse und Farben
 
 - **Im Spiel:** im Positionieren-Modus am Griff rechts unten eines Overlays ziehen oder dort
-  das Mausrad drehen. Alternativ der Grössen-Schieber auf der Karte (40–300 %).
+  das Mausrad drehen. Alternativ der Grössen-Schieber auf der Detailseite (40–300 %).
 - **Im Stream:** Element anklicken und am Eck-Griff ziehen.
-- **Farben:** Reiter «Farben» – Vorlagen (OM Gold, Rennrot, Papaya, Petrol, Eisblau, Violett,
+- **Farben:** Bereich «Farben» – Vorlagen (OM Gold, Rennrot, Papaya, Petrol, Eisblau, Violett,
   Silber, Hell) oder eigene Farben für Akzent, Hintergrund, Text, schneller und langsamer.
 
 ## Weitere Elemente (ab 1.4.1)

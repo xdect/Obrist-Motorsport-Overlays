@@ -52,8 +52,11 @@ jobs:
       - name: Release veröffentlichen
         run: |
           VER="${{ steps.ver.outputs.version }}"
+          # Nur die höchste Version wird «latest» (wichtig, wenn mehrere Tags gleichzeitig ankommen)
+          TOP="$( (git ls-remote --tags origin 'v*' | sed -E 's#.*refs/tags/v##; s#\^\{\}##'; echo "$VER") | sort -uV | tail -1)"
+          LATEST=true; [ "$TOP" = "$VER" ] || LATEST=false
           # Bei manuellem Start legt gh den Tag v$VER auf diesem Commit selbst an
-          gh release create "v$VER" --target "$GITHUB_SHA" \
+          gh release create "v$VER" --target "$GITHUB_SHA" --latest="$LATEST" \
             "dist/OM-Overlays-Setup-$VER.exe" \
             "dist/OM-Overlays-$VER-portable.zip" \
             dist/latest.json \

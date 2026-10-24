@@ -138,9 +138,12 @@ function balloon(title, content) {
 
 function createControl(show) {
   control = new BrowserWindow({
-    width: 1240, height: 900, minWidth: 460,
+    width: 1360, height: 880, minWidth: 960, minHeight: 620,
     title: 'OM Overlays',
-    backgroundColor: '#101113',
+    backgroundColor: '#0B0C0E',
+    // Eigene Kopfleiste wie bei RaceLab; Windows zeichnet nur die Fensterknöpfe rechts
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#070809', symbolColor: '#9A9AA0', height: 46 },
     icon: ICON,
     show: false,
     autoHideMenuBar: true,

@@ -1,14 +1,16 @@
-// Hauptfenster von OM Overlays: Spiel-Layouts, Zuordnung je Session-Art, Stream-Editor, Updates.
+// Hauptfenster von OM Overlays – aufgebaut wie RaceLab: Kopfleiste mit Bereichen, Seitenleiste,
+// Kartenraster mit Live-Vorschau, Detailseite je Overlay und Fussleiste mit Layout, Sperre und Datenquelle.
 (function () {
   const D = OMDefaults;
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const origin = location.origin;
   const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const icon = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
   const INFO = {
     relative:  'Fahrer direkt vor und hinter dir auf der Strecke, mit Abstand in Sekunden.',
     standings: 'Rangliste mit Abstand, letzter und bester Runde.',
-    fuel:      'Verbrauch pro Runde, Reichweite und wie viel du beim Stopp nachtanken musst.',
+    fuel:      'Spritrechner: Boxenfenster, Verbrauch Ø/Max/Min, Tankmenge und Rest im Ziel.',
     inputs:    'Gas, Bremse, Kupplung und Lenkung als Verlauf, dazu Gang und Tempo.',
     delta:     'Delta zur Bestzeit mit Rundenprognose.',
     trackmap:  'Alle Autos live auf der Strecke. Die Karte wird beim ersten Mal aus deiner Fahrt aufgezeichnet.',
@@ -20,20 +22,27 @@
     gmeter:    'Längs- und Querkräfte mit Traktionskreis deiner Session.',
     cover:     'Standbild über dem ganzen Stream, solange du in der Garage bist.',
   };
+  // Reihenfolge und Kartengrösse im Raster: breite Overlays bekommen breite Karten
+  const ORDER = ['fuel', 'relative', 'pithelper', 'gmeter', 'trackmap', 'standings', 'inputs', 'digiflag', 'timer', 'datablock', 'delta', 'flags'];
+  const WIDE = new Set(['fuel', 'relative', 'standings', 'inputs', 'delta', 'flags']);
+  const NEW = new Set(['fuel', 'pithelper', 'gmeter', 'flags', 'digiflag', 'timer', 'datablock', 'cover']);
+  const SCENE = { fuel: 'dusk', relative: 'steel', pithelper: 'pit', gmeter: 'night', trackmap: 'dawn', standings: 'dusk',
+    inputs: 'night', digiflag: 'steel', timer: 'dawn', datablock: 'pit', delta: 'steel', flags: 'dusk', cover: 'night' };
   const STATUS = {
-    live: 'iRacing verbunden, Overlays aktiv',
-    demo: 'Demo läuft, Overlays aktiv',
-    waiting: 'Wartet auf iRacing. Overlays erscheinen, sobald du in einer Session bist.',
+    live: 'iRacing verbunden',
+    demo: 'Demo läuft',
+    waiting: 'Wartet auf iRacing',
   };
 
   let S = null;              // Einstellungen
   let layoutInfo = null;     // { active, category, editing } vom Core
   let lastStatus = '';
   let lastCar = undefined;
-  const ui = { tab: 'game', layout: null, stream: null, widget: null };
-  let renderedLayout = null; // für welches Layout die Karten gerade gebaut sind
+  const ui = { view: 'home', detail: null, filter: '', layout: null, stream: null, widget: null };
+  let renderedLayout = null; // für welches Layout das Raster gebaut ist
+  let renderedDetail = '';
   let renderedInspector = '';
-  try { ui.tab = localStorage.getItem('om.tab') || 'game'; } catch { /* egal */ }
+  try { const v = localStorage.getItem('om.view'); if (v) ui.view = v; } catch { /* egal */ }
 
   // ---------- Server ----------
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2800); }
@@ -52,15 +61,13 @@
     try { await navigator.clipboard.writeText(text); toast('Adresse kopiert'); } catch { toast(text); }
   }
 
-  // ---------- Optionen je Overlay-Typ (für Karten und Stream-Inspektor) ----------
+  // ---------- Optionen je Overlay-Typ (Detailseite und Stream-Inspektor) ----------
   function showHtml(o, type) {
     if (type === 'cover') return '';
     return `<div class="opt full"><span>Sichtbar</span><select data-k="show">${Object.entries(D.SHOW).map(([k, l]) =>
       `<option value="${k}" ${(o.show || 'both') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
   }
-  function optsHtml(type, o) {
-    return showHtml(o, type) + typeOptsHtml(type, o);
-  }
+  function optsHtml(type, o) { return showHtml(o, type) + typeOptsHtml(type, o); }
   function typeOptsHtml(type, o) {
     switch (type) {
       case 'relative': return `
@@ -104,107 +111,168 @@
     if (out) out.textContent = (el.dataset.k === 'scale' || el.dataset.k === 'opacity') ? Math.round(v * 100) : v;
   }
 
-  // ---------- Kopf ----------
-  function renderHeader() {
+
+  // ---------- Bereiche ----------
+  function showView(v) {
+    ui.view = v;
+    try { localStorage.setItem('om.view', v); } catch { /* egal */ }
+    $$('.nav [data-view]').forEach((b) => { if (b.dataset.view === v) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    $$('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== v; });
+    $('#body').classList.toggle('noside', !['overlays', 'stream'].includes(v));
+    $('#main').scrollTop = 0;
+    if (!S) return;
+    renderSide();
+    if (v === 'colors') renderColors();
+    if (v === 'stream') requestAnimationFrame(fitStage);
+    if (v === 'overlays') requestAnimationFrame(() => { fitPreviews(); fitDetail(); });
+  }
+  $$('.nav [data-view]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.view === 'overlays' && ui.view === 'overlays') openDetail(null);
+    showView(b.dataset.view);
+  }));
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b) showView(b.dataset.go); });
+
+  // ---------- Seitenleiste ----------
+  const layoutIds = () => Object.keys(S.layouts);
+  const sessionsOf = (id) => Object.keys(D.SESSIONS).filter((k) => S.gameAssign[k] === id).map((k) => D.SESSIONS[k]);
+  const gameOrder = () => ORDER.filter((t) => S.layouts[ui.layout].overlays[t]).concat(D.gameTypes().filter((t) => !ORDER.includes(t)));
+  const matches = (t) => !ui.filter || (D.TYPES[t].title + ' ' + INFO[t]).toLowerCase().includes(ui.filter);
+
+  function renderSide() {
+    const side = $('#side');
+    if (ui.view === 'overlays') {
+      const L = S.layouts[ui.layout];
+      const types = D.gameTypes().slice().sort((a, b) => D.TYPES[a].title.localeCompare(D.TYPES[b].title, 'de'));
+      side.innerHTML = `
+        <div class="side-head"><span class="tab">${icon('layers')}OVERLAYS</span><span class="sub" title="${esc(L.name)}">${esc(L.name)}</span></div>
+        <ul class="slist">${types.filter(matches).map((t) => `<li><button data-open="${t}" aria-current="${ui.detail === t}">${icon(t)}<span class="lbl">${esc(D.TYPES[t].title)}</span><i class="dot ${L.overlays[t].enabled ? 'on' : ''}" title="${L.overlays[t].enabled ? 'An' : 'Aus'}"></i></button></li>`).join('')}</ul>
+        <h4>Layouts</h4>
+        <ul class="slist">${layoutIds().map((id) => {
+          const tags = sessionsOf(id);
+          return `<li><button data-layout="${id}" aria-current="${id === ui.layout}">${icon('layers')}<span class="lbl">${esc(S.layouts[id].name)}${tags.length ? `<small>${tags.join(', ')}</small>` : ''}</span></button></li>`;
+        }).join('')}<li><button class="add" data-act="newLayout">${icon('plus')}<span class="lbl">Neues Layout</span></button></li></ul>`;
+    } else if (ui.view === 'stream') {
+      const ids = Object.keys(S.streams);
+      side.innerHTML = `
+        <div class="side-head"><span class="tab">${icon('stream')}STREAM</span><span class="sub">für OBS</span></div>
+        <ul class="slist">${ids.map((id) => `<li><button data-stream="${id}" aria-current="${id === ui.stream}">${icon('stream')}<span class="lbl">${esc(S.streams[id].name)}</span><span class="meta">${S.streams[id].width}×${S.streams[id].height}</span></button></li>`).join('')}
+          <li><button class="add" data-act="newStream">${icon('plus')}<span class="lbl">Neues Stream-Overlay</span></button></li></ul>
+        ${S.streams[ui.stream] ? `<h4>Element hinzufügen</h4>
+        <ul class="slist">${Object.keys(D.TYPES).map((t) => `<li><button data-add="${t}" title="${esc(INFO[t])}">${icon(t)}<span class="lbl">${esc(D.TYPES[t].title)}</span>${icon('plus')}</button></li>`).join('')}</ul>` : ''}`;
+    } else side.innerHTML = '';
+  }
+  $('#side').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.open) { openDetail(b.dataset.open); return; }
+    if (b.dataset.layout) { selectLayout(b.dataset.layout); return; }
+    if (b.dataset.act === 'newLayout') { newLayout(); return; }
+    if (b.dataset.stream) { ui.stream = b.dataset.stream; ui.widget = null; refresh(); }
+  });
+
+  // ---------- Fussleiste ----------
+  function renderBottom() {
     $$('[data-source]').forEach((b) => b.setAttribute('aria-pressed', String(S.source === b.dataset.source)));
     $('#demoSession').hidden = S.source !== 'demo';
     $('#demoSession').value = S.demoSession;
     $('#demoCar').hidden = S.source !== 'demo';
     $('#demoCar').value = S.demoCar;
-    const lock = $('#lockBtn');
-    lock.textContent = S.locked ? 'Overlays entsperren' : 'Overlays sperren';
-    lock.className = 'btn ' + (S.locked ? '' : 'unlocked');
+    $('#lockOn').setAttribute('aria-pressed', String(!!S.locked));
+    $('#lockOff').setAttribute('aria-pressed', String(!S.locked));
+    const sel = $('#layoutSel');
+    if (document.activeElement !== sel) {
+      sel.innerHTML = layoutIds().map((id) => `<option value="${id}">${esc(S.layouts[id].name)}</option>`).join('');
+      sel.value = S.editLayout || ui.layout;
+    }
+    const go = $('#posBtn');
+    go.classList.toggle('done', !!S.editLayout);
+    go.innerHTML = S.editLayout ? `${icon('check')}<span>Fertig positioniert</span>` : `${icon('move')}<span>Positionieren</span>`;
+    go.title = S.editLayout ? 'Positionen übernehmen und Overlays sperren' : 'Layout auf dem Bildschirm anzeigen, um die Overlays zu verschieben';
+    $('#activeCount').textContent = Object.values(S.layouts[ui.layout].overlays).filter((o) => o.enabled).length;
     $('#brandNum').textContent = S.carNumber || '13';
     $('#autostart').checked = !!S.autostart;
     $('#autoUpdate').checked = S.autoUpdate !== false;
+    const bar = $('#positioning');
+    bar.hidden = !S.editLayout;
+    if (S.editLayout) {
+      const en = S.layouts[S.editLayout];
+      $('#positioningText').textContent = `«${en ? en.name : ''}» wird jetzt auf dem Bildschirm angezeigt. Ziehe die Overlays an ihren Platz; am Griff rechts unten änderst du die Grösse.`;
+    }
   }
   $$('[data-source]').forEach((b) => b.addEventListener('click', () => patch({ source: b.dataset.source })));
   $('#demoSession').addEventListener('change', (e) => patch({ demoSession: e.target.value }));
   $('#demoCar').addEventListener('change', (e) => patch({ demoCar: e.target.value }));
-  $('#lockBtn').addEventListener('click', () => {
-    patch({ locked: !S.locked });
-    if (S.locked && lastStatus === 'waiting' && !S.editLayout) toast('Ohne Session sind die Overlays ausgeblendet. Zum Verschieben «Auf dem Bildschirm positionieren» nutzen.');
+  $('#lockOn').addEventListener('click', () => { if (!S.locked) patch({ locked: true }); });
+  $('#lockOff').addEventListener('click', () => {
+    if (!S.locked) return;
+    patch({ locked: false });
+    if (lastStatus === 'waiting' && !S.editLayout) toast('Ohne Session sind die Overlays ausgeblendet. Zum Verschieben «Positionieren» nutzen.');
   });
+  $('#layoutSel').addEventListener('change', (e) => {
+    selectLayout(e.target.value);
+    if (S.editLayout) patch({ editLayout: e.target.value });
+  });
+  $('#posBtn').addEventListener('click', () => {
+    if (S.editLayout) { patch({ editLayout: null, locked: true }); toast('Positionen gespeichert'); }
+    else { patch({ editLayout: ui.layout, locked: false }); toast('Overlays erscheinen jetzt auf dem Bildschirm'); }
+  });
+  $('#posDone').addEventListener('click', () => patch({ editLayout: null, locked: true }));
 
-  // ---------- Reiter ----------
-  function showTab(t) {
-    ui.tab = t;
-    try { localStorage.setItem('om.tab', t); } catch { /* egal */ }
-    $('#tab-game').setAttribute('aria-selected', String(t === 'game'));
-    $('#tab-stream').setAttribute('aria-selected', String(t === 'stream'));
-    $('#tab-colors').setAttribute('aria-selected', String(t === 'colors'));
-    $('#pane-game').hidden = t !== 'game';
-    $('#pane-stream').hidden = t !== 'stream';
-    $('#pane-colors').hidden = t !== 'colors';
-    if (t === 'colors') renderColors();
-    if (t === 'stream') requestAnimationFrame(fitStage);
-    else requestAnimationFrame(fitPreviews);
-  }
-  $('#tab-game').addEventListener('click', () => showTab('game'));
-  $('#tab-stream').addEventListener('click', () => showTab('stream'));
-  $('#tab-colors').addEventListener('click', () => showTab('colors'));
-
-  // ================= Im Spiel =================
-  const layoutIds = () => Object.keys(S.layouts);
-  const sessionsOf = (id) => Object.keys(D.SESSIONS).filter((k) => S.gameAssign[k] === id).map((k) => D.SESSIONS[k]);
-
-  function renderAssign() {
-    const box = $('#assign');
-    const opts = (sel) => layoutIds().map((id) => `<option value="${id}" ${id === sel ? 'selected' : ''}>${esc(S.layouts[id].name)}</option>`).join('');
+  // ================= Start =================
+  function renderHome() {
     const active = layoutInfo && S.layouts[layoutInfo.active];
     const cat = layoutInfo && D.SESSIONS[layoutInfo.category];
-    const now = !active ? '' : layoutInfo.editing
-      ? `Wird positioniert: <b>${esc(active.name)}</b>`
-      : lastStatus === 'waiting' ? 'Gerade keine Session'
-      : `Jetzt aktiv: <b>${esc(active.name)}</b>${cat ? ` (${cat})` : ''}`;
-    if (box.contains(document.activeElement)) { $('.now', box).innerHTML = now; return; }
+    $('#heroNum').textContent = S.carNumber || '13';
+    $('#heroDriver').textContent = S.driverName || 'Overlays';
+    $('#heroBig').textContent = lastStatus === 'live' ? 'In der Session' : lastStatus === 'demo' ? 'Demo läuft' : 'Bereit';
+    $('#heroSmall').textContent = !active ? '' : S.editLayout ? `Wird positioniert: ${S.layouts[S.editLayout] ? S.layouts[S.editLayout].name : ''}`
+      : lastStatus === 'waiting' ? 'Overlays erscheinen, sobald du in einer iRacing-Session bist.'
+      : `Aktives Layout: ${active.name}${cat ? ` (${cat})` : ''}${lastCar === true ? ' · im Auto' : lastCar === false ? ' · in der Box' : ''}`;
+    const L = active || S.layouts[ui.layout];
+    $('#tileOverlays').textContent = Object.values(L.overlays).filter((o) => o.enabled).length;
+    $('#tileOverlaysK').textContent = `Overlays aktiv in «${L.name}»`;
+    $('#tileStreams').textContent = Object.keys(S.streams).length;
+    const pre = D.PRESETS.find((p) => themeEq({ ...D.THEME, ...p }, S.theme));
+    $('#tileTheme').textContent = pre ? pre.name : 'Eigene Farben';
+    $('#tileSource').textContent = S.source === 'demo' ? 'Demo' : 'iRacing';
+    renderAssign();
+  }
+  function renderAssign() {
+    const box = $('#assign');
+    if (box.contains(document.activeElement)) return;
+    const opts = (sel) => layoutIds().map((id) => `<option value="${id}" ${id === sel ? 'selected' : ''}>${esc(S.layouts[id].name)}</option>`).join('');
     box.innerHTML = Object.entries(D.SESSIONS).map(([k, label]) =>
-      `<label class="field">${label}<select data-assign="${k}">${opts(S.gameAssign[k])}</select></label>`).join('') +
-      `<span class="now">${now}</span>`;
+      `<label class="field">${label}<select data-assign="${k}">${opts(S.gameAssign[k])}</select></label>`).join('');
   }
   $('#assign').addEventListener('change', (e) => {
     const k = e.target.dataset.assign;
     if (k) patch({ gameAssign: { [k]: e.target.value } });
   });
 
-  function renderLayoutChips() {
-    $('#layoutChips').innerHTML = layoutIds().map((id) => {
-      const tags = sessionsOf(id);
-      return `<button class="chip" data-layout="${id}" aria-pressed="${id === ui.layout}">${esc(S.layouts[id].name)}${tags.length ? `<small>${tags.join(', ')}</small>` : ''}</button>`;
-    }).join('') + '<button class="chip add" data-act="newLayout">+ Neues Layout</button>';
+  // ================= Overlays (Spiel) =================
+  function selectLayout(id) {
+    ui.layout = id;
+    refresh();
   }
-  $('#layoutChips').addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    if (b.dataset.act === 'newLayout') {
-      const id = D.newId('l');
-      ui.layout = id;
-      patch({ layouts: { [id]: D.gameLayout(`Layout ${layoutIds().length + 1}`) } });
-      toast('Neues Layout angelegt');
-    } else if (b.dataset.layout) {
-      ui.layout = b.dataset.layout;
-      refresh();
-    }
-  });
-
-  function renderLayoutToolbar() {
+  function newLayout() {
+    const id = D.newId('l');
+    ui.layout = id;
+    patch({ layouts: { [id]: D.gameLayout(`Layout ${layoutIds().length + 1}`) } });
+    toast('Neues Layout angelegt');
+  }
+  function renderLayoutTool() {
     const l = S.layouts[ui.layout];
     const name = $('#layoutName');
     if (document.activeElement !== name) name.value = l.name;
+    const tags = sessionsOf(ui.layout);
+    $('#layoutTag').innerHTML = tags.length ? `Für <b>${tags.join(', ')}</b>` : 'Keiner Session zugeordnet (Start → Zuordnung)';
     $('#layoutDel').disabled = layoutIds().length < 2;
-    const editingThis = S.editLayout === ui.layout;
-    $('#posStart').hidden = editingThis;
-    const bar = $('#positioning');
-    bar.hidden = !S.editLayout;
-    if (S.editLayout) {
-      const en = S.layouts[S.editLayout];
-      $('#positioningText').textContent = `«${en ? en.name : ''}» wird jetzt auf dem Bildschirm angezeigt. Ziehe die Overlays an ihren Platz und klicke danach auf «Fertig positioniert».`;
-    }
   }
   $('#layoutName').addEventListener('input', (e) => {
     const v = e.target.value.trim() || 'Layout';
     patchSoon('lname', { layouts: { [ui.layout]: { name: v } } }, 400);
   });
+  $('#layoutNew').addEventListener('click', newLayout);
   $('#layoutDup').addEventListener('click', () => {
     const src = S.layouts[ui.layout];
     const id = D.newId('l');
@@ -221,72 +289,156 @@
     patch({ layouts: { [id]: null } });
   });
   $('#resetPos').addEventListener('click', () => { command({ cmd: 'resetPositions', layout: ui.layout }); toast('Positionen zurückgesetzt'); });
-  $('#posStart').addEventListener('click', () => {
-    patch({ editLayout: ui.layout, locked: false });
-    toast('Overlays erscheinen jetzt auf dem Bildschirm');
+  $('#filter').addEventListener('input', (e) => {
+    ui.filter = e.target.value.trim().toLowerCase();
+    renderGrid();
+    renderSide();
   });
-  $('#posDone').addEventListener('click', () => patch({ editLayout: null, locked: true }));
 
-  function renderCards() {
+  const previewSrc = (type) => `/overlays/${type}.html?mode=preview&layout=${encodeURIComponent(ui.layout)}`;
+  function renderGrid() {
     const grid = $('#grid');
-    const L = ui.layout;
-    renderedLayout = L;
-    grid.innerHTML = '';
-    for (const [type, o] of Object.entries(S.layouts[L].overlays)) {
-      const t = D.TYPES[type];
-      const url = `${origin}/overlays/${type}.html`;
-      const card = document.createElement('section');
-      card.className = 'card' + (o.enabled ? ' on' : '');
-      card.dataset.type = type;
-      card.innerHTML = `
-        <div class="preview"><iframe src="/overlays/${type}.html?mode=preview&layout=${encodeURIComponent(L)}" width="${t.w}" height="${t.h}" title="Vorschau ${t.title}" tabindex="-1"></iframe></div>
-        <div class="card-head"><h2>${t.title}</h2>
-          <label class="switch"><input type="checkbox" data-k="enabled" ${o.enabled ? 'checked' : ''}><span>Anzeigen</span></label></div>
-        <div class="opts">
-          <div class="opt full" style="color:var(--mist);font-size:13.5px;line-height:1.35">${INFO[type]}</div>
-          <div class="opt"><span>Grösse <output>${Math.round(o.scale * 100)}</output> %</span><input type="range" min="0.4" max="3" step="0.05" value="${o.scale}" data-k="scale"></div>
-          <div class="opt"><span>Deckkraft <output>${Math.round(o.opacity * 100)}</output> %</span><input type="range" min="0.3" max="1" step="0.02" value="${o.opacity}" data-k="opacity"></div>
-          ${optsHtml(type, o)}
-        </div>
-        <div class="obs"><span class="k">Einzeln in OBS</span><code title="${url}">${url}</code><button class="btn" data-copy="${url}">Kopieren</button></div>`;
-      grid.appendChild(card);
-    }
+    renderedLayout = ui.layout;
+    const L = S.layouts[ui.layout];
+    const list = gameOrder().filter(matches);
+    grid.classList.toggle('flat', !!ui.filter);
+    grid.innerHTML = list.length ? list.map((type) => {
+      const t = D.TYPES[type], o = L.overlays[type];
+      return `<article class="ocard ${WIDE.has(type) ? 'wide' : ''} ${o.enabled ? 'on' : ''}" data-type="${type}" tabindex="0" role="button" aria-label="${esc(t.title)} öffnen">
+        <div class="scene s-${SCENE[type] || 'steel'}"></div>
+        <div class="pv"><iframe src="${previewSrc(type)}" width="${t.w}" height="${t.h}" title="Vorschau ${esc(t.title)}" tabindex="-1" loading="lazy"></iframe></div>
+        ${NEW.has(type) ? '<span class="badge">NEU</span>' : ''}
+        <label class="switch" title="Im Layout anzeigen"><input type="checkbox" data-toggle="${type}" ${o.enabled ? 'checked' : ''}><span>${o.enabled ? 'An' : 'Aus'}</span></label>
+        <div class="cap"><h3>${icon(type)}${esc(t.title)}</h3><p>${esc(INFO[type])}</p></div>
+      </article>`;
+    }).join('') : '<p class="empty">Kein Overlay passt zum Filter.</p>';
     fitPreviews();
   }
+  // Vorschau mittig in die Karte einpassen
+  function fitFrame(box, fr, t, pad = 18) {
+    const bw = box.clientWidth, bh = box.clientHeight;
+    if (!bw) return;
+    const s = Math.min(1.25, (bw - pad * 2) / t.w, (bh - pad * 2) / t.h);
+    fr.style.transform = `scale(${s})`;
+    fr.style.left = Math.round((bw - t.w * s) / 2) + 'px';
+    fr.style.top = Math.round((bh - t.h * s) / 2) + 'px';
+  }
   function fitPreviews() {
-    $$('#grid .card').forEach((card) => {
-      const t = D.TYPES[card.dataset.type];
-      const box = $('.preview', card), fr = $('iframe', box);
-      const s = Math.min(1, (box.clientWidth - 20) / t.w, (box.clientHeight - 20) / t.h);
-      fr.style.transform = `scale(${s})`;
+    $$('#grid .ocard').forEach((card) => fitFrame($('.pv', card), $('iframe', card), D.TYPES[card.dataset.type]));
+  }
+  function updateGridState() {
+    const L = S.layouts[ui.layout];
+    $$('#grid .ocard').forEach((card) => {
+      const o = L.overlays[card.dataset.type];
+      if (!o) return;
+      card.classList.toggle('on', !!o.enabled);
+      const inp = $('input[data-toggle]', card);
+      if (inp && document.activeElement !== inp) inp.checked = !!o.enabled;
+      $('.switch span', card).textContent = o.enabled ? 'An' : 'Aus';
     });
   }
-  $('#grid').addEventListener('input', (e) => {
-    const el = e.target, card = el.closest('.card');
-    if (!card || !el.dataset.k) return;
-    const v = inputValue(el);
-    showOutput(el, v);
-    if (el.dataset.k === 'enabled') card.classList.toggle('on', v);
-    patchSoon(`card-${card.dataset.type}-${el.dataset.k}`,
-      { layouts: { [renderedLayout]: { overlays: { [card.dataset.type]: { [el.dataset.k]: v } } } } }, el.type === 'range' ? 120 : 0);
+  function setEnabled(type, v) {
+    S.layouts[ui.layout].overlays[type].enabled = v; // sofort sichtbar, gespeichert wird direkt danach
+    updateGridState(); renderSide(); renderBottom();
+    patch({ layouts: { [ui.layout]: { overlays: { [type]: { enabled: v } } } } });
+  }
+  $('#grid').addEventListener('change', (e) => {
+    const t = e.target.dataset.toggle;
+    if (t) setEnabled(t, e.target.checked);
   });
-  $('#grid').addEventListener('click', (e) => { const b = e.target.closest('[data-copy]'); if (b) copy(b.dataset.copy); });
+  $('#grid').addEventListener('click', (e) => {
+    if (e.target.closest('.switch')) return;
+    const card = e.target.closest('.ocard');
+    if (card) openDetail(card.dataset.type);
+  });
+  $('#grid').addEventListener('keydown', (e) => {
+    const card = e.target.closest('.ocard');
+    if (card && e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openDetail(card.dataset.type); }
+  });
+
+  // Detailseite
+  function openDetail(type) {
+    ui.detail = type;
+    if (ui.view !== 'overlays') showView('overlays');
+    renderedDetail = '';
+    renderOverlays();
+    renderSide();
+    $('#main').scrollTop = 0;
+  }
+  function renderOverlays() {
+    $('#ovList').hidden = !!ui.detail;
+    $('#ovDetail').hidden = !ui.detail;
+    renderLayoutTool();
+    if (!ui.detail) {
+      if (renderedLayout !== ui.layout || !$('#grid').children.length) renderGrid(); else updateGridState();
+      return;
+    }
+    const type = ui.detail, t = D.TYPES[type], o = S.layouts[ui.layout].overlays[type];
+    const key = `${ui.layout}/${type}`;
+    const box = $('#ovDetail');
+    if (renderedDetail === key) {
+      const inp = $('input[data-k="enabled"]', box);
+      if (inp && document.activeElement !== inp) inp.checked = !!o.enabled;
+      return;
+    }
+    renderedDetail = key;
+    const url = `${origin}/overlays/${type}.html`;
+    box.innerHTML = `
+      <div class="dhead">
+        <button class="back" data-act="back">${icon('back')}Alle Overlays</button>
+        <h1>${icon(type)}${esc(t.title)}</h1>
+        <span class="spacer"></span>
+        <label class="switch"><input type="checkbox" data-k="enabled" ${o.enabled ? 'checked' : ''}><span>Im Layout «${esc(S.layouts[ui.layout].name)}» anzeigen</span></label>
+      </div>
+      <div class="dgrid">
+        <div class="dprev"><div class="scene s-${SCENE[type] || 'steel'}"></div><div class="pvbox"><iframe src="${previewSrc(type)}" width="${t.w}" height="${t.h}" title="Vorschau ${esc(t.title)}" tabindex="-1"></iframe></div></div>
+        <div class="block dset" style="margin:0">
+          <p class="desc">${esc(INFO[type])}</p>
+          <div class="opts" data-type="${type}">
+            <div class="opt"><span>Grösse <output>${Math.round(o.scale * 100)}</output> %</span><input type="range" min="0.4" max="3" step="0.05" value="${o.scale}" data-k="scale"></div>
+            <div class="opt"><span>Deckkraft <output>${Math.round(o.opacity * 100)}</output> %</span><input type="range" min="0.3" max="1" step="0.02" value="${o.opacity}" data-k="opacity"></div>
+            ${optsHtml(type, o)}
+          </div>
+        </div>
+      </div>
+      <div class="block" style="margin-top:16px">
+        <h3>Einzeln in OBS</h3>
+        <div class="obs"><code title="${url}">${url}</code><button class="btn" data-copy="${url}">${icon('copy')}Kopieren</button></div>
+        <p class="hint" style="margin-top:8px">Ganze Szenen mit mehreren Elementen baust du unter <b>Stream</b>.</p>
+      </div>`;
+    requestAnimationFrame(fitDetail);
+  }
+  function fitDetail() {
+    const fr = $('#ovDetail iframe');
+    if (fr && ui.detail) fitFrame($('#ovDetail .pvbox'), fr, D.TYPES[ui.detail], 30);
+  }
+  $('#ovDetail').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="back"]')) { openDetail(null); return; }
+    const b = e.target.closest('[data-copy]'); if (b) copy(b.dataset.copy);
+  });
+  $('#ovDetail').addEventListener('input', (e) => {
+    const el = e.target, k = el.dataset.k;
+    if (!k || !ui.detail) return;
+    const v = inputValue(el);
+    if (k === 'enabled') { setEnabled(ui.detail, v); return; }
+    showOutput(el, v);
+    patchSoon(`det-${ui.detail}-${k}`, { layouts: { [ui.layout]: { overlays: { [ui.detail]: { [k]: v } } } } }, el.type === 'range' ? 120 : 0);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && ui.view === 'overlays' && ui.detail && !e.target.closest('input,select')) openDetail(null);
+  });
 
   // ================= Stream =================
   const streamIds = () => Object.keys(S.streams);
   let stageScale = 1;
 
-  function renderStreamChips() {
-    $('#streamChips').innerHTML = streamIds().map((id) =>
-      `<button class="chip" data-stream="${id}" aria-pressed="${id === ui.stream}">${esc(S.streams[id].name)}<small>${S.streams[id].width}×${S.streams[id].height}</small></button>`).join('') +
-      '<button class="chip add" data-act="newStream">+ Neues Stream-Overlay</button>';
-  }
   function newStream() {
     const id = D.newId('s');
     const base = S.streams[ui.stream];
     const s = D.streamLayout(`Stream ${streamIds().length + 1}`);
     if (base) { s.width = base.width; s.height = base.height; }
     ui.stream = id; ui.widget = null;
+    if (ui.view !== 'stream') showView('stream');
     patch({ streams: { [id]: s } });
     toast('Stream-Overlay angelegt. Füge jetzt Elemente hinzu.');
   }
@@ -294,13 +446,6 @@
     const b = e.target.closest('[data-act="newStream"]');
     if (b) newStream();
   });
-  $('#streamChips').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-stream]');
-    if (!b) return;
-    ui.stream = b.dataset.stream; ui.widget = null;
-    refresh();
-  });
-
   function renderStream() {
     const has = !!S.streams[ui.stream];
     $('#streamEmpty').hidden = has;
@@ -313,7 +458,7 @@
     const sv = `${s.width}x${s.height}`;
     if (![...sizeSel.options].some((o) => o.value === sv)) sizeSel.insertAdjacentHTML('beforeend', `<option value="${sv}">${s.width} × ${s.height}</option>`);
     sizeSel.value = sv;
-    $('#streamSessions').innerHTML = '<span class="hint">Zeigen bei:</span>' + Object.entries(D.SESSIONS).map(([k, label]) =>
+    $('#streamSessions').innerHTML = '<span class="hint">Im Stream zeigen bei:</span>' + Object.entries(D.SESSIONS).map(([k, label]) =>
       `<label><input type="checkbox" data-session="${k}" ${s.sessions[k] !== false ? 'checked' : ''}> ${label}</label>`).join('');
     const url = `${origin}/stream/?id=${encodeURIComponent(ui.stream)}`;
     $('#streamUrl').textContent = url;
@@ -338,7 +483,7 @@
     $('#canvas').style.transform = `scale(${stageScale})`;
     $('#canvas').style.setProperty('--inv', String(1 / stageScale));
   }
-  window.addEventListener('resize', () => { fitStage(); fitPreviews(); });
+  window.addEventListener('resize', () => { fitStage(); fitPreviews(); fitDetail(); });
 
   $('#streamName').addEventListener('input', (e) => patchSoon('sname', { streams: { [ui.stream]: { name: e.target.value.trim() || 'Stream' } } }, 400));
   $('#streamSize').addEventListener('change', (e) => {
@@ -371,10 +516,9 @@
   $('#streamCopy').addEventListener('click', () => copy($('#streamUrl').textContent));
 
   // Elemente hinzufügen
-  $('#adders').insertAdjacentHTML('beforeend', Object.entries(D.TYPES).map(([t, x]) => `<button class="btn" data-add="${t}">${x.title}</button>`).join(''));
-  $('#adders').addEventListener('click', (e) => {
+  document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
-    if (!b) return;
+    if (!b || !S.streams[ui.stream]) return;
     const s = S.streams[ui.stream];
     const t = D.TYPES[b.dataset.add];
     if (t.streamOnly) {
@@ -633,12 +777,12 @@
       if (document.activeElement !== inp) inp.value = t[k].toLowerCase();
     }
     const pv = $('#themePreview');
-    if (!pv.children.length) {
+    if (!$('.fr', pv)) {
       const L = (layoutInfo && layoutInfo.active) || Object.keys(S.layouts)[0];
-      pv.innerHTML = ['relative', 'delta', 'fuel'].map((type) => {
-        const tt = D.TYPES[type], sc = 0.85;
+      pv.insertAdjacentHTML('beforeend', ['relative', 'delta', 'fuel'].map((type) => {
+        const tt = D.TYPES[type], sc = 0.8;
         return `<div class="fr" style="width:${Math.round(tt.w * sc)}px;height:${Math.round(tt.h * sc)}px"><iframe src="/overlays/${type}.html?mode=preview&layout=${encodeURIComponent(L)}" width="${tt.w}" height="${tt.h}" style="transform:scale(${sc})" tabindex="-1" title="Vorschau ${tt.title}"></iframe></div>`;
-      }).join('');
+      }).join(''));
     }
   }
   $('#presets').addEventListener('click', (e) => {
@@ -656,24 +800,23 @@
   // ---------- Gemeinsam ----------
   function ensureSelection() {
     if (!S.layouts[ui.layout]) ui.layout = (layoutInfo && S.layouts[layoutInfo.active]) ? layoutInfo.active : layoutIds()[0];
-    if (!S.streams[ui.stream]) { ui.stream = streamIds()[0] || null; ui.widget = null; }
+    if (!S.streams[ui.stream]) { ui.stream = Object.keys(S.streams)[0] || null; ui.widget = null; }
+    if (ui.detail && !S.layouts[ui.layout].overlays[ui.detail]) ui.detail = null;
   }
   function refresh() {
     if (!S) return;
     ensureSelection();
     applyAccent();
-    renderHeader();
-    if (ui.tab === 'colors') renderColors();
-    renderAssign();
-    renderLayoutChips();
-    renderLayoutToolbar();
-    if (renderedLayout !== ui.layout || !$('#grid').children.length) renderCards();
-    renderStreamChips();
+    renderBottom();
+    renderSide();
+    renderHome();
+    renderOverlays();
+    if (ui.view === 'colors') renderColors();
     renderStream();
     $('#demoHint').hidden = lastStatus !== 'waiting';
   }
 
-  // Footer
+  // Einstellungen
   $('#clearTrack').addEventListener('click', () => { command({ cmd: 'clearTrack' }); toast('Karte wird neu aufgezeichnet'); });
   $('#autostart').addEventListener('change', (e) => {
     patch({ autostart: e.target.checked });
@@ -690,6 +833,7 @@
   }
   function renderUpdate(u) {
     $('#ver').textContent = u.current || '–';
+    $('#verTop').textContent = u.current || '–';
     const box = $('#update');
     $('#updMsg').textContent = u.phase === 'checking' ? 'Suche …' : u.phase === 'uptodate' ? 'Du hast die neueste Version.' : '';
     $('#checkBtn').disabled = ['checking', 'downloading', 'installing'].includes(u.phase);
@@ -723,15 +867,21 @@
   });
 
   // ---------- Verbindung ----------
-  showTab(ui.tab);
+  showView(ui.view);
   OMLink.connect({
     update: renderUpdate,
-    settings(data) { S = data; refresh(); },
+    settings(data) {
+      const first = !S;
+      S = data;
+      if (first && layoutInfo && S.layouts[layoutInfo.active]) ui.layout = layoutInfo.active;
+      refresh();
+      if (first) showView(ui.view);
+    },
     layout(info) {
       const first = !layoutInfo;
       layoutInfo = info;
-      if (first && S && !ui.layout) ui.layout = info.active;
-      if (S) { renderAssign(); }
+      if (first && S && S.layouts[info.active] && !ui.detail) { ui.layout = info.active; refresh(); }
+      else if (S) renderHome();
     },
     frame(f) {
       if (f.status === lastStatus && f.inCar === lastCar) return;
@@ -739,9 +889,9 @@
       lastCar = f.inCar;
       const el = $('#status');
       el.className = 'status ' + f.status;
-      const where = f.status === 'waiting' || f.inCar === null || f.inCar === undefined ? '' : f.inCar ? ' – im Auto' : ' – in der Box';
+      const where = f.status === 'waiting' || f.inCar === null || f.inCar === undefined ? '' : f.inCar ? ' · im Auto' : ' · in der Box';
       $('span', el).textContent = (STATUS[f.status] || f.status) + where;
-      if (S) { renderAssign(); $('#demoHint').hidden = lastStatus !== 'waiting'; }
+      if (S) { renderHome(); $('#demoHint').hidden = lastStatus !== 'waiting'; }
     },
     close() { const el = $('#status'); el.className = 'status'; $('span', el).textContent = 'Keine Verbindung zum Core'; lastStatus = ''; },
   });

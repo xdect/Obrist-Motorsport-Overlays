@@ -3,6 +3,15 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.4.2
+
+- Hauptfenster neu aufgebaut, ähnlich wie RaceLab: Kopfleiste mit Start, Overlays, Stream, Farben und Einstellungen
+- Overlays als grosse Karten mit Live-Vorschau; Klick öffnet die Detailseite mit allen Einstellungen
+- Seitenleiste mit allen Elementen (Punkt = im Layout aktiv) und den Layouts, dazu ein Suchfeld
+- Fussleiste: Anzahl aktiver Overlays, Sperren/Entsperren, Positionieren mit Layout-Auswahl, iRacing/Demo
+- Startseite mit Status, Zuordnung der Layouts zu Training, Qualifying und Rennen
+- Eigene Titelleiste im OM-Stil
+
 ## 1.4.1
 
 - Neuer Spritrechner: Boxenfenster (offen/zu), Ø-, Max- und Min-Verbrauch mit Runden, Tankmenge und Rest im Ziel, Verlauf der letzten Runden
