@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM G-Kraft</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  html, body { height: 100%; }
+  .panel { height: 100%; display: flex; flex-direction: column; }
+  .stage { position: relative; flex: 1; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tag { position: absolute; font-size: 12.5px; font-weight: 700; background: rgba(0,0,0,.55); color: var(--chalk); padding: 2px 7px; border-radius: 2px; white-space: nowrap; }
+  .tag small { color: var(--mist); font-weight: 600; margin-left: 2px; }
+  #tTop { top: 4px; left: 50%; transform: translateX(-50%); }
+  #tBot { bottom: 4px; left: 50%; transform: translateX(-50%); }
+  #tL { left: 4px; top: 50%; transform: translateY(-50%); }
+  #tR { right: 4px; top: 50%; transform: translateY(-50%); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--rule); font-size: 14px; font-weight: 600; }
+  .stats div { padding: 6px 0 7px; text-align: center; }
+  .stats small { display: block; font-size: 10.5px; color: var(--mist); font-weight: 500; }
+</style>
+</head>
+<body data-overlay="gmeter">
+<div class="panel">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <span class="tag" id="tTop" title="stärkste Verzögerung">–</span>
+    <span class="tag" id="tBot" title="stärkste Beschleunigung">–</span>
+    <span class="tag" id="tL" title="stärkste Querkraft links">–</span>
+    <span class="tag" id="tR" title="stärkste Querkraft rechts">–</span>
+  </div>
+  <div class="stats"><div><small>Gas</small><span id="sThr">–</span></div><div><small>Tempo</small><span id="sSpd">–</span></div><div><small>Strecke</small><span id="sTrk">–</span></div></div>
+</div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  // Hüllkurve (Traktionskreis): stärkster Wert je 5°-Richtung in dieser Session
+  const BINS = 72;
+  let env = new Array(BINS).fill(0);
+  let maxB = 0, maxA = 0, maxL = 0, maxR = 0, session = null;
+  const trail = [];
+
+  function draw(g) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 26;
+    if (R <= 4) return; // unsichtbar (z. B. Vorschau in einem verborgenen Reiter)
+    const maxG = Math.max(1, OM.cfg().maxG || 3);
+    const k = R / maxG;
+    // Ringe je 1 G und Fadenkreuz
+    ctx.strokeStyle = OM.alpha('--chalk', 0.12); ctx.lineWidth = 1;
+    for (let i = 1; i <= maxG; i++) { ctx.beginPath(); ctx.arc(cx, cy, i * k, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.strokeStyle = OM.alpha('--chalk', 0.28);
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+    // Hüllkurve
+    ctx.beginPath();
+    env.forEach((m, i) => {
+      const a = (i / BINS) * Math.PI * 2, r = Math.min(m, maxG) * k;
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = OM.alpha('--chalk', 0.85); ctx.lineWidth = 1.6; ctx.stroke();
+    // kurzer Verlauf + aktueller Punkt
+    trail.forEach((p, i) => {
+      ctx.fillStyle = OM.alpha('--gold', (i + 1) / trail.length * 0.5);
+      ctx.beginPath(); ctx.arc(cx + p[0] * k, cy + p[1] * k, 2, 0, Math.PI * 2); ctx.fill();
+    });
+    if (g) {
+      ctx.fillStyle = OM.css('--gold');
+      ctx.beginPath(); ctx.arc(cx + g[0] * k, cy + g[1] * k, 5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  OM.connect({
+    onFrame(f, waiting) {
+      if (waiting || !f.g) { draw(null); return; }
+      if (f.track && f.track.name + f.session.type !== session) { // neue Session → zurücksetzen
+        session = f.track.name + f.session.type;
+        env = new Array(BINS).fill(0); maxB = maxA = maxL = maxR = 0;
+      }
+      // Bildschirm: rechts = Kurve rechts (Querkraft), oben = Bremsen, unten = Beschleunigen
+      const x = -f.g.lat, y = f.g.long; // Bremsen (negativ) → nach oben
+      const mag = Math.hypot(x, y);
+      if (mag > 0.05 && mag < 6) {
+        let a = Math.atan2(y, x); if (a < 0) a += Math.PI * 2;
+        const b = Math.round((a / (Math.PI * 2)) * BINS) % BINS;
+        env[b] = Math.max(env[b], mag);
+        // Nachbarn leicht mitziehen, damit die Kurve geschlossen wirkt
+        env[(b + 1) % BINS] = Math.max(env[(b + 1) % BINS], mag * 0.92);
+        env[(b + BINS - 1) % BINS] = Math.max(env[(b + BINS - 1) % BINS], mag * 0.92);
+      }
+      maxB = Math.max(maxB, y < 0 ? -y : 0);
+      maxA = Math.max(maxA, y > 0 ? y : 0);
+      maxL = Math.max(maxL, x < 0 ? -x : 0);
+      maxR = Math.max(maxR, x > 0 ? x : 0);
+      trail.push([x, y]); if (trail.length > 24) trail.shift();
+      $('tTop').innerHTML = `${maxB.toFixed(1)}<small>G</small>`;
+      $('tBot').innerHTML = `${maxA.toFixed(1)}<small>G</small>`;
+      $('tL').innerHTML = `${maxL.toFixed(1)}<small>G</small>`;
+      $('tR').innerHTML = `${maxR.toFixed(1)}<small>G</small>`;
+      $('sThr').textContent = Math.round((f.inputs.throttle || 0) * 100) + ' %';
+      $('sSpd').textContent = Math.round((f.inputs.speed || 0) * 3.6) + ' km/h';
+      $('sTrk').textContent = f.data && f.data.trackTemp !== null ? f.data.trackTemp.toFixed(0) + ' °C' : '–';
+      draw([x, y]);
+    },
+  });
+</script>
+</body>
+</html>

@@ -10,7 +10,7 @@ const crypto = require('crypto');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
 };
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_BACKLOG = 512 * 1024; // langsamer Client (z. B. ausgeblendete OBS-Quelle) → Frames auslassen
@@ -63,8 +63,9 @@ class WsClient {
 }
 
 class Server {
-  constructor({ webRoot, port, getSettings, onSettings, onCommand }) {
+  constructor({ webRoot, mediaDir, port, getSettings, onSettings, onCommand }) {
     this.webRoot = webRoot;
+    this.mediaDir = mediaDir; // eigene Bilder (z. B. Garagen-Cover)
     this.port = port;
     this.getSettings = getSettings;
     this.onSettings = onSettings;
@@ -133,6 +134,30 @@ class Server {
     if (p === '/api/settings') {
       if (req.method === 'GET') return this._json(res, 200, this.getSettings());
       if (req.method === 'POST') { const patch = await this._body(req); return this._json(res, 200, this.onSettings(patch)); }
+    }
+    // Bild hochladen (Garagen-Cover): Rohdaten im Body, Typ im Content-Type
+    if (p === '/api/upload' && req.method === 'POST') {
+      const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[String(req.headers['content-type']).split(';')[0]];
+      if (!ext || !this.mediaDir) return this._json(res, 415, { error: 'Nur PNG, JPG, WebP oder GIF.' });
+      const chunks = []; let size = 0;
+      req.on('data', (c) => { size += c.length; if (size > 25 * 1024 * 1024) { req.destroy(); } else chunks.push(c); });
+      req.on('end', () => {
+        try {
+          fs.mkdirSync(this.mediaDir, { recursive: true });
+          const name = `${Date.now().toString(36)}.${ext}`;
+          fs.writeFileSync(path.join(this.mediaDir, name), Buffer.concat(chunks));
+          this._json(res, 200, { url: `/media/${name}` });
+        } catch (e) { this._json(res, 500, { error: e.message }); }
+      });
+      return;
+    }
+    if (p.startsWith('/media/') && this.mediaDir) {
+      const file = path.join(this.mediaDir, path.basename(decodeURIComponent(p)));
+      return fs.readFile(file, (err, data) => {
+        if (err) { res.writeHead(404); return res.end(); }
+        res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'max-age=86400' });
+        res.end(data);
+      });
     }
     if (p === '/api/command' && req.method === 'POST') {
       const cmd = await this._body(req);

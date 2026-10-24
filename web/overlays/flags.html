@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Flaggen</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .panel { transition: opacity .25s ease; }
+  .ftitle { padding: 12px 14px 9px; font-family: var(--font-wide); font-size: 20px; font-weight: 700; letter-spacing: .02em; color: var(--fc, var(--gold)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fname { display: flex; align-items: center; gap: 10px; padding: 7px 14px 8px; background: var(--fc, var(--gold)); color: var(--fo, #16171A);
+    font-weight: 700; font-size: 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); margin-right: 20px; }
+  .fname svg { width: 26px; height: 18px; flex: none; }
+  body.noflag .panel { opacity: 0; }
+  body.preview.noflag .panel { opacity: 1; }
+  body.preview.noflag .ftitle { color: var(--mist); font-size: 16px; }
+  body.preview.noflag .fname { display: none; }
+</style>
+</head>
+<body data-overlay="flags">
+<div class="panel">
+  <div class="ftitle" id="title">–</div>
+  <div class="fname" id="name"></div>
+</div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/flags.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  // Flaggen-Symbol: wehende Fahne
+  const ICON = `<svg viewBox="0 0 26 18" aria-hidden="true"><path d="M3 1v17" stroke="currentColor" stroke-width="2"/>
+    <path d="M4 2c4-2 7 2 11 0s6-1 9 0v9c-3-1-5-2-9 0s-7-2-11 0z" fill="currentColor"/></svg>`;
+  const HOLD = 3000; // eine Flagge mindestens 3 s zeigen, damit sie nicht flackert
+  let shown = null, since = 0;
+
+  function onColor(hex) { return OMDefaults.onColor(hex); }
+
+  OM.connect({
+    onFrame(f, waiting) {
+      let flag = waiting ? null : f.flag;
+      const now = Date.now();
+      if (!flag && shown && now - since < HOLD) flag = shown;
+      if (flag && (!shown || flag.id !== shown.id)) since = now;
+      shown = flag;
+      document.body.classList.toggle('noflag', !flag);
+      if (!flag) { document.getElementById('title').textContent = 'Keine Flagge'; return; }
+      document.documentElement.style.setProperty('--fc', flag.color);
+      document.documentElement.style.setProperty('--fo', onColor(flag.color));
+      document.getElementById('title').textContent = flag.title;
+      document.getElementById('name').innerHTML = ICON + OM.esc(flag.name);
+    },
+  });
+</script>
+</body>
+</html>

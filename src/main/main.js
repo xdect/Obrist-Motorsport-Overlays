@@ -10,13 +10,12 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, screen, globalShortcut, dia
 const { fork } = require('child_process');
 const path = require('path');
 const { Updater, feedUrl } = require('./updater');
-const { showFor } = require('../../web/shared/defaults');
+const OMD = require('../../web/shared/defaults');
+const { showFor } = OMD;
 const pkg = require('../../package.json');
 
-const BASE = {
-  relative: [430, 300], standings: [540, 620], fuel: [330, 230],
-  inputs: [430, 150], delta: [470, 96], trackmap: [330, 330],
-};
+// Grundgrössen aller Overlays, die als Fenster über iRacing laufen (aus der gemeinsamen Typenliste)
+const BASE = Object.fromEntries(OMD.gameTypes().map((t) => [t, [OMD.TYPES[t].w, OMD.TYPES[t].h]]));
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 const HIDE_DELAY = 2500; // ms – kurze Aussetzer (Ladebildschirm, Sessionwechsel) nicht flackern lassen
 const STATUS_TEXT = { live: 'iRacing verbunden', demo: 'Demo läuft', waiting: 'Wartet auf iRacing' };
@@ -266,9 +265,15 @@ function defaultPositions() {
     standings: r(20, 20),
     relative: r(20, H - 330),
     delta: r(W / 2 - 235, 20),
-    fuel: r(W - 350, 20),
+    fuel: r(W - 580, 20),
     trackmap: r(W - 350, 270),
     inputs: r(W / 2 - 215, H - 170),
+    flags: r(W / 2 - 190, 140),
+    digiflag: r(W / 2 + 260, 140),
+    timer: r(W / 2 - 160, 250),
+    datablock: r(W - 290, H - 90),
+    pithelper: r(W - 250, H / 2 - 170),
+    gmeter: r(20, H / 2 - 150),
   };
 }
 

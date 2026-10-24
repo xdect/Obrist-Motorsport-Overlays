@@ -132,3 +132,42 @@ test('Sichtbarkeit im Auto / in der Box und Farbschema', () => {
   assert.strictEqual(D.themeVars({ accent: '#D7263D' })['--on-accent'], '#FFFFFF');
   assert.strictEqual(normalize({ demoCar: 'irgendwas' }).demoCar, 'car');
 });
+
+test('Spritrechner: Ø/Max/Min, Boxenfenster, Rundenliste', () => {
+  const { compute } = require('../web/shared/fuel-calc');
+  const base = { tank: 60, laps: [2.8, 2.7, 2.9, 2.8, 3.0], lapNos: [4, 5, 6, 7, 8], lapTimes: [], lapsRemain: null,
+    timeRemain: -1, lapDistPct: 0, lapCompleted: 8, lapBest: 90, fallbackLap: 90 };
+  // 30 Runden zu fahren, 35 L im Tank → ein Stopp nötig
+  const r = compute({ ...base, fuel: 35, lapsRemain: 29 }, { avgLaps: 5, marginLaps: 0.5 });
+  assert.ok(Math.abs(r.avg - 2.84) < 1e-9);
+  assert.strictEqual(r.max, 3.0);
+  assert.strictEqual(r.min, 2.7);
+  assert.strictEqual(r.rows.max.refuel > r.rows.avg.refuel, true);
+  assert.strictEqual(r.rows.min.refuel < r.rows.avg.refuel, true);
+  assert.strictEqual(r.rows.avg.finish, null);              // reicht nicht ins Ziel
+  // spätestens: 35/2.84 = 12.3 Rd → Ende Runde 9+12-1 = 20; frühestens: 8 + 30 - 60/2.84 + 0.5 = 17.4 → 18
+  assert.deepStrictEqual(r.window, { status: 'closed', from: 18, to: 20 });
+  assert.strictEqual(r.history.length, 5);
+  assert.deepStrictEqual(r.history[0].lap, 8);
+  assert.ok(Math.abs(r.history[0].diff - 0.16) < 1e-9);
+  // im Fenster
+  const r2 = compute({ ...base, fuel: 20, lapsRemain: 18, lapCompleted: 18, lapNos: [14, 15, 16, 17, 18] }, { avgLaps: 5, marginLaps: 0.5 });
+  assert.strictEqual(r2.window.status, 'open');
+  // reicht ohne Stopp
+  const r3 = compute({ ...base, fuel: 40, lapsRemain: 9 }, { avgLaps: 5, marginLaps: 0.5 });
+  assert.strictEqual(r3.window.status, 'none');
+  assert.ok(r3.rows.avg.finish > 11 && r3.rows.avg.finish < 12);
+  // zwei Stopps nötig
+  const r4 = compute({ ...base, fuel: 10, lapsRemain: 59 }, { avgLaps: 5, marginLaps: 0.5 });
+  assert.strictEqual(r4.window.status, 'multi');
+});
+
+test('Flaggen erkennen', () => {
+  const { decode } = require('../web/shared/flags');
+  assert.strictEqual(decode(0x8).id, 'yellow');
+  assert.strictEqual(decode(0x4000 | 0x8).id, 'caution');
+  assert.strictEqual(decode(0x20 | 0x4).id, 'blue');
+  assert.strictEqual(decode(0x1 | 0x2).id, 'checkered');
+  assert.strictEqual(decode(0x10000 | 0x8).id, 'black');
+  assert.strictEqual(decode(0x10000000 | 0x40000), null);   // nur Start-/Service-Bits → keine Flagge
+});

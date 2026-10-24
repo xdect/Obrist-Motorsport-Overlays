@@ -221,6 +221,16 @@ class DemoSource {
     let throttle = acc > 0.3 ? Math.min(1, 0.45 + acc / 6) : (v > 70 ? 1 : (brake > 0 ? 0 : 0.38 + 0.1 * Math.sin(this.sessionTime * 7)));
     throttle = Math.max(0, Math.min(1, throttle));
     const steer = Math.max(-4, Math.min(4, Math.atan(2.7 * tr.k[i]) * 15));
+    // G-Kräfte: quer = v² · Krümmung, längs = Beschleunigung/Bremsen (m/s²)
+    const latAccel = v * v * tr.k[i] + Math.sin(this.sessionTime * 9) * 0.4;
+    const longAccel = brake > 0 ? -brake * 14 : Math.max(-1, acc) * (throttle > 0.9 ? 1 : 0.6);
+    // Flaggen im Wechsel (Zyklus 45 s), damit Flaggen und Digiflag in der Demo etwas zeigen
+    const cyc = this.sessionTime % 45;
+    const flags = cyc < 7 ? 0x8 : cyc >= 15 && cyc < 22 ? 0x20 : cyc >= 30 && cyc < 37 ? 0x4000 : 0;
+    const tire = (base, k) => ({
+      temp: [base + 4 + k, base + 7 + k, base + 2 + k].map((x) => x + Math.sin(this.sessionTime / 7 + k) * 1.5),
+      wear: [0.94 - k * 0.01, 0.97 - k * 0.01, 0.95 - k * 0.01],
+    });
     const kmh = v * 3.6;
     const gear = kmh < 75 ? 2 : kmh < 115 ? 3 : kmh < 155 ? 4 : kmh < 195 ? 5 : 6;
     const tops = [0, 0, 75, 115, 155, 195, 270];
@@ -237,8 +247,9 @@ class DemoSource {
       connected: true,
       demo: true,
       sessionUid: 'demo',
-      track: { id: 9999, name: 'Red Bull Ring', config: 'Grand Prix', length: '4.32 km' },
-      session: { type: 'Race', timeRemain: Math.max(0, this.timeRemain), lapsRemain: null, time: this.sessionTime, flags: 0 },
+      track: { id: 9999, name: 'Red Bull Ring', config: 'Grand Prix', length: '4.32 km', lengthM: TRACK_LEN, pitLimitKph: 80, pitPct: 0.985 },
+      session: { type: 'Race', timeRemain: Math.max(0, this.timeRemain), lapsRemain: null, time: this.sessionTime, flags, timeTotal: 45 * 60, lapsTotal: null },
+      weather: { airTemp: 21.4, trackTemp: 33.8 },
       playerIdx: this.playerIdx,
       car: {
         fuel: this.fuel,
@@ -266,6 +277,13 @@ class DemoSource {
         rpm,
         abs: brake > 0.85,
         onTrack: true,
+        inGarage: false,
+        replay: false,
+        engineWarnings: 0,
+        latAccel,
+        longAccel,
+        incidents: 2,
+        tires: { lf: tire(82, 0), rf: tire(86, 2), lr: tire(79, 1), rr: tire(84, 3) },
       },
       drivers: this.cars.map((c) => ({
         idx: c.idx, name: c.name, abbrev: '', number: c.number, classId: 1, className: 'GT3', classColor: 'var(--gold)', // Demo: Klassenfarbe = Akzentfarbe

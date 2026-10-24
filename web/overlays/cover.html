@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Garagen-Cover</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  html, body { width: 100%; height: 100%; padding: 0; }
+  .cover { position: fixed; inset: 0; overflow: hidden; opacity: 0; transition: opacity .45s ease;
+    background:
+      radial-gradient(ellipse at 30% 40%, rgba(255,255,255,.05), transparent 60%),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0 2px, transparent 2px 9px),
+      #101113; }
+  .cover.on { opacity: 1; }
+  .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  /* OM-Standardbild – alles in vw, damit es in jeder Stream-Grösse gleich aussieht */
+  .om { position: absolute; inset: 0; }
+  /* Gold-Balken passt sich dem Inhalt an: Nummer und Schriftzug nebeneinander */
+  .band { position: absolute; left: 0; top: 30%; height: 22vw; display: flex; align-items: center; gap: 3vw;
+    padding: 0 11vw 0 6vw; background: var(--gold); color: var(--on-accent);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 7vw) 100%, 0 100%); }
+  .bignum { font-family: var(--font-wide); font-weight: 800; font-size: 17vw; line-height: 1; letter-spacing: -.02em; }
+  .brand { display: flex; flex-direction: column; gap: .8vw; white-space: nowrap; }
+  .brand .t1 { font-family: var(--font-wide); font-weight: 800; font-size: 3.8vw; line-height: 1; }
+  .brand .t2 { font-family: var(--font-wide); font-weight: 500; font-size: 1.9vw; opacity: .8; }
+  .msg { position: absolute; left: 6vw; top: calc(30% + 25vw); color: #F2F0EA; }
+  .msg .h { font-family: var(--font-wide); font-weight: 700; font-size: 3.6vw; }
+  .msg .s { font-size: 1.6vw; color: #9A9AA0; margin-top: .6vw; }
+  .tick { position: absolute; right: 5vw; bottom: 4vw; display: flex; gap: .6vw; }
+  .tick i { width: 1.4vw; height: 1.4vw; background: var(--gold); opacity: .25; animation: tick 1.6s infinite; }
+  .tick i:nth-child(2) { animation-delay: .2s; } .tick i:nth-child(3) { animation-delay: .4s; }
+  @keyframes tick { 0%, 100% { opacity: .2; } 40% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .tick i { animation: none; opacity: .6; } .cover { transition: none; } }
+</style>
+</head>
+<body data-overlay="cover">
+<div class="cover" id="cover">
+  <div class="om" id="om">
+    <div class="band">
+      <div class="bignum" id="num">13</div>
+      <div class="brand"><div class="t1">Obrist Motorsport</div><div class="t2" id="driver">Mischa Obrist</div></div>
+    </div>
+    <div class="msg"><div class="h">Gleich geht's weiter</div><div class="s">Kurzer Halt in der Garage</div></div>
+    <div class="tick"><i></i><i></i><i></i></div>
+  </div>
+</div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const cover = document.getElementById('cover');
+  let img = null;
+
+  function setup() {
+    const c = OM.cfg();
+    document.getElementById('num').textContent = OM.settings.carNumber || '13';
+    document.getElementById('driver').textContent = OM.settings.driverName || '';
+    document.getElementById('om').hidden = !!c.image;
+    if (c.image) {
+      if (!img) { img = document.createElement('img'); img.alt = ''; cover.appendChild(img); }
+      if (img.getAttribute('src') !== c.image) img.src = c.image;
+    } else if (img) { img.remove(); img = null; }
+    if (OM.mode === 'preview') cover.classList.add('on');
+  }
+
+  OM.connect({
+    onSettings: setup,
+    onFrame(f, waiting) {
+      if (OM.mode === 'preview') return;
+      const c = OM.cfg();
+      // «garage»: nur im Garagen-Bildschirm; «box»: immer wenn du nicht im Auto sitzt
+      const on = !waiting && (c.trigger === 'box' ? f.inCar === false : f.inGarage === true);
+      cover.classList.toggle('on', on);
+    },
+  });
+</script>
+</body>
+</html>

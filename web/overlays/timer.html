@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Session-Timer</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .wrap { padding: 9px 14px 11px; }
+  .line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .val { font-family: var(--font-wide); font-size: 36px; font-weight: 700; line-height: 1; letter-spacing: .01em; }
+  .lbl { font-size: 13px; color: var(--mist); text-align: right; }
+  .lbl b { display: block; color: var(--chalk); font-weight: 600; font-size: 14px; }
+  .bar { height: 7px; background: var(--graphite); border-radius: 1px; overflow: hidden; margin-top: 9px; }
+  .bar i { display: block; height: 100%; background: var(--gold); transition: width .5s linear; }
+  .final .val { color: var(--gold); }
+</style>
+</head>
+<body data-overlay="timer">
+<div class="panel"><div class="wrap" id="wrap">
+  <div class="line"><div class="val" id="val">–</div><div class="lbl" id="lbl"></div></div>
+  <div class="bar"><i id="bar"></i></div>
+</div></div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const hms = (s) => {
+    if (!(s >= 0)) return '–';
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = Math.floor(s % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`;
+  };
+  const SESS = { Race: 'Rennen', Practice: 'Training', 'Open Qualify': 'Qualifying', 'Lone Qualify': 'Qualifying', Qualify: 'Qualifying', Warmup: 'Warm-up' };
+
+  OM.connect({
+    onFrame(f, waiting) {
+      if (waiting) { $('val').textContent = '–'; $('lbl').innerHTML = ''; $('bar').style.width = '0'; return; }
+      const t = f.timer, mode = OM.cfg().mode || 'auto';
+      const useLaps = mode === 'laps' || (mode === 'auto' && t.lapsRemain !== null && t.lapsRemain !== undefined);
+      let val, label, prog = 0;
+      if (useLaps && t.lapsRemain !== null && t.lapsRemain !== undefined) {
+        val = t.lapsTotal ? `${Math.max(0, t.lapsTotal - t.lapsRemain)}/${t.lapsTotal}` : `${t.lapsRemain}`;
+        label = t.lapsTotal ? 'Runden' : 'Runden übrig';
+        prog = t.lapsTotal ? 1 - t.lapsRemain / t.lapsTotal : 0;
+      } else {
+        val = hms(t.timeRemain);
+        label = 'Restzeit';
+        prog = t.timeTotal > 0 ? 1 - t.timeRemain / t.timeTotal : 0;
+      }
+      $('val').textContent = val;
+      $('lbl').innerHTML = `<b>${OM.esc(SESS[f.session.type] || f.session.type || '')}</b>${label}`;
+      $('bar').style.width = Math.max(0, Math.min(100, prog * 100)) + '%';
+      $('wrap').classList.toggle('final', (!useLaps && t.timeRemain >= 0 && t.timeRemain < 300) || (useLaps && t.lapsRemain !== null && t.lapsRemain <= 1));
+    },
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Datenblock</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .wrap { display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 12px; height: 56px; }
+  .ico { width: 30px; height: 30px; flex: none; color: var(--gold); }
+  .txt { min-width: 0; flex: 1; text-align: right; }
+  .lbl { font-size: 11.5px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .val { font-family: var(--font-wide); font-size: 25px; font-weight: 700; line-height: 1.05; white-space: nowrap; }
+  body.nolabel .lbl { display: none; }
+  body.nolabel .val { font-size: 28px; }
+</style>
+</head>
+<body data-overlay="datablock">
+<div class="panel"><div class="wrap">
+  <svg class="ico" id="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+  <div class="txt"><div class="lbl" id="lbl"></div><div class="val" id="val">–</div></div>
+</div></div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  // Einfache Linien-Symbole je Wert
+  const ICONS = {
+    watch: '<circle cx="12" cy="13" r="8"/><path d="M12 13l3-3M10 2h4M12 2v3"/>',
+    delta: '<path d="M12 4l9 16H3z"/>',
+    speed: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    rpm: '<path d="M3 15a9 9 0 0 1 18 0"/><path d="M12 15l-3-5"/><path d="M6 15h1M17 15h1"/>',
+    fuel: '<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16"/><path d="M3 21h13M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3"/><path d="M7 7h5"/>',
+    pos: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/>',
+    flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+    temp: '<path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/>',
+    warn: '<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  };
+  const DEF = {
+    lapCurrent: ['watch', (d) => OM.lap(d.lapCurrent)],
+    lapLast: ['watch', (d) => OM.lap(d.lapLast)],
+    lapBest: ['watch', (d) => OM.lap(d.lapBest)],
+    deltaBest: ['delta', (d) => (d.deltaBest === null ? '–' : OM.signed(d.deltaBest, 2)), (d) => (d.deltaBest === null ? '' : d.deltaBest < 0 ? 'gain' : 'loss')],
+    speed: ['speed', (d) => `${Math.round(d.speed)} km/h`],
+    gear: ['gear', (d) => (d.gear === -1 ? 'R' : d.gear === 0 ? 'N' : String(d.gear))],
+    rpm: ['rpm', (d) => Math.round(d.rpm).toLocaleString('de-CH')],
+    fuel: ['fuel', (d) => `${(d.fuel || 0).toFixed(1)} L`],
+    position: ['pos', (d) => (d.position ? `P${d.position}/${d.cars}` : '–')],
+    lap: ['flag', (d) => (d.lap > 0 ? `Runde ${d.lap}` : '–')],
+    lapsRemain: ['flag', (d) => (d.lapsRemain === null || d.lapsRemain === undefined ? '–' : String(d.lapsRemain))],
+    timeRemain: ['clock', (d) => OM.clock(d.timeRemain) || '–'],
+    airTemp: ['temp', (d) => (d.airTemp === null ? '–' : `${d.airTemp.toFixed(1)} °C`)],
+    trackTemp: ['temp', (d) => (d.trackTemp === null ? '–' : `${d.trackTemp.toFixed(1)} °C`)],
+    incidents: ['warn', (d) => (d.incidents === null ? '–' : `${d.incidents}x`)],
+    clock: ['clock', () => new Date().toLocaleTimeString('de-CH')],
+  };
+  let lastMetric = '';
+
+  function setup() {
+    const c = OM.cfg();
+    const m = DEF[c.metric] ? c.metric : 'lapCurrent';
+    document.body.classList.toggle('nolabel', c.showLabel === false);
+    if (m === lastMetric) return;
+    lastMetric = m;
+    $('ico').innerHTML = ICONS[DEF[m][0]];
+    $('lbl').textContent = OMDefaults.METRICS[m];
+  }
+
+  OM.connect({
+    onSettings: setup,
+    onFrame(f, waiting) {
+      setup();
+      const def = DEF[lastMetric];
+      if (waiting || !f.data) { $('val').textContent = lastMetric === 'clock' ? def[1]() : '–'; $('val').className = 'val'; return; }
+      $('val').textContent = def[1](f.data);
+      $('val').className = 'val ' + (def[2] ? def[2](f.data) : '');
+    },
+  });
+</script>
+</body>
+</html>

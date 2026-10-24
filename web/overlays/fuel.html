@@ -2,25 +2,49 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>OM Fuel</title>
+<title>OM Spritrechner</title>
 <link rel="stylesheet" href="/shared/om.css">
 <style>
-  .hero { display: flex; align-items: baseline; justify-content: space-between; padding: 10px 12px 6px; }
-  .hero .label { color: var(--mist); font-size: 13px; }
-  .hero .val { font-family: var(--font-wide); font-size: 30px; font-weight: 700; }
-  .hero .val small { font-size: 15px; font-weight: 500; color: var(--mist); margin-left: 3px; }
-  .hero.ok .val { color: var(--gain); }
-  .hero.add .val { color: var(--gold-pale); }
-  .bar { position: relative; height: 8px; margin: 0 12px 10px; background: var(--graphite); border-radius: 1px; overflow: visible; }
-  .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--chalk); border-radius: 1px; }
-  .bar .need { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--gold); }
-  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--rule); }
-  .cell { padding: 7px 12px 8px; border-left: 1px solid var(--rule); }
-  .cell:nth-child(3n+1) { border-left: 0; }
-  .cell:nth-child(n+4) { border-top: 1px solid var(--rule); }
-  .cell .k { font-size: 12px; color: var(--mist); margin-bottom: 4px; }
-  .cell .v { font-size: 18px; font-weight: 600; }
-  .warn .v { color: var(--loss); }
+  .body { display: grid; grid-template-columns: 1fr 168px; }
+  .main { padding: 8px 10px 8px 10px; border-right: 1px solid var(--rule); }
+  .top { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .win { display: flex; flex-direction: column; justify-content: center; min-width: 74px; padding: 4px 8px; border-radius: 2px;
+    background: var(--graphite); color: var(--chalk); font-weight: 700; line-height: 1.05; }
+  .win b { font-family: var(--font-wide); font-size: 15px; letter-spacing: .02em; }
+  .win small { font-size: 11.5px; font-weight: 600; opacity: .85; }
+  .win.open { background: var(--gain); color: #0F1A12; }
+  .win.none { background: transparent; box-shadow: inset 0 0 0 2px var(--gain); color: var(--gain); }
+  .win.multi { background: var(--loss); color: #fff; }
+  .refuel { font-family: var(--font-wide); font-size: 26px; font-weight: 700; white-space: nowrap; }
+  .refuel small { font-size: 13px; color: var(--mist); font-weight: 500; margin-left: 2px; }
+  .tank { position: relative; }
+  .tank .bar { height: 10px; background: var(--graphite); border-radius: 1px; overflow: hidden; }
+  .tank .bar i { display: block; height: 100%; background: var(--chalk); }
+  .tank .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--mist); margin-top: 3px; }
+  .tank .lbl b { color: var(--chalk); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { font-size: 11px; font-weight: 600; color: var(--mist); text-align: right; padding: 0 0 3px; }
+  th:first-child { text-align: left; }
+  td { text-align: right; padding: 3px 0; border-top: 1px solid var(--rule); font-weight: 600; }
+  td:first-child { text-align: left; font-weight: 700; width: 38px; }
+  tr.avg td:first-child { color: var(--gold); }
+  tr.max td { color: var(--loss); }
+  tr.min td { color: var(--gain); }
+  tr.max td:first-child, tr.min td:first-child { font-weight: 700; }
+  .pitbar { display: grid; grid-template-columns: 34px 1fr; gap: 6px; align-items: center; margin-top: 7px; font-size: 11px; color: var(--mist); font-weight: 600; }
+  .segs { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; height: 9px; }
+  .segs i { background: var(--graphite); border-radius: 1px; }
+  .segs i.ok { background: var(--gain); }
+  .segs i.warn { background: var(--gold); }
+  .segs i.crit { background: var(--loss); }
+  .hist { padding: 8px 10px; font-size: 14px; }
+  .hist .h, .hist .r { display: grid; grid-template-columns: 36px 1fr 1fr; text-align: right; }
+  .hist .h { font-size: 11px; color: var(--mist); font-weight: 600; padding-bottom: 3px; }
+  .hist .r { padding: 3px 0; border-top: 1px solid var(--rule); font-weight: 600; }
+  .hist .h span:first-child, .hist .r span:first-child { text-align: left; color: var(--mist); }
+  .hist .up { color: var(--loss); }
+  .hist .down { color: var(--gain); }
+  .hist .none { color: var(--mist); font-weight: 400; font-size: 12.5px; text-align: left; padding-top: 4px; grid-column: 1 / -1; display: block; }
 </style>
 </head>
 <body data-overlay="fuel">
@@ -36,34 +60,55 @@
   const head = document.getElementById('head');
   const body = document.getElementById('body');
   const L = (x, d = 1) => (x === null || x === undefined || !Number.isFinite(x)) ? '–' : x.toFixed(d);
+  const signed = (x) => (x === null || x === undefined) ? '' : (x > 0.005 ? '+' : x < -0.005 ? '−' : '±') + Math.abs(x).toFixed(1);
+
+  function windowBox(w) {
+    switch (w.status) {
+      case 'open': return `<div class="win open"><b>OFFEN</b><small>R${w.from}–${w.to}</small></div>`;
+      case 'closed': return `<div class="win"><b>ZU</b><small>ab R${w.from}</small></div>`;
+      case 'none': return `<div class="win none"><b>REICHT</b><small>kein Stopp</small></div>`;
+      case 'multi': return `<div class="win multi"><b>2+ STOPPS</b><small>bis R${w.to}</small></div>`;
+      default: return `<div class="win"><b>MISST</b><small>Verbrauch</small></div>`;
+    }
+  }
 
   OM.connect({
     onFrame(f, waiting) {
-      OM.header(head, 'Fuel', waiting || !f.fuel ? '' : `<span><b>${L(f.fuel.fuel)}</b> L</span>`);
+      OM.header(head, 'Spritrechner', waiting || !f.fuel ? '' : `<span><b>${L(f.fuel.fuel)}</b> L</span>`);
       if (waiting) { body.innerHTML = `<div class="empty">${OM.waitingText}</div>`; return; }
       if (!f.fuel) return;
       const x = OMFuel.compute(f.fuel, OM.cfg()); // mit Reserve/Durchschnitt dieses Overlays
-      let hero;
-      if (!x.avg) {
-        hero = `<div class="hero"><span class="label">Verbrauch wird gemessen</span><span class="val">${L(x.fuel)}<small>L</small></span></div>`;
-      } else if (x.toAdd === 0) {
-        hero = `<div class="hero ok"><span class="label">Reicht bis ins Ziel</span><span class="val">${L(x.lapsOfFuel - (x.lapsToGo || 0))}<small>Rd. Reserve</small></span></div>`;
-      } else {
-        hero = `<div class="hero add"><span class="label">Nachtanken${x.stops > 1 ? ` (${x.stops} Stopps)` : ''}</span><span class="val">+${L(x.toAdd)}<small>L</small></span></div>`;
+      const r = x.rows;
+      const refuel = x.window.status === 'none'
+        ? `<div class="refuel">${L(r.avg.finish)}<small>L im Ziel</small></div>`
+        : `<div class="refuel">${x.toAdd !== null ? '+' + L(x.toAdd) : '–'}<small>L tanken</small></div>`;
+      const pct = x.tank ? Math.min(100, (x.fuel / x.tank) * 100) : 0;
+
+      const lapsLeft = x.lapsOfFuel !== null ? x.lapsOfFuel : 0;
+      let segs = '';
+      for (let i = 0; i < 20; i++) {
+        const cls = i < Math.floor(lapsLeft) ? (lapsLeft - i <= 1.5 ? 'crit' : lapsLeft - i <= 3.5 ? 'warn' : 'ok') : '';
+        segs += `<i class="${cls}"></i>`;
       }
-      const fillPct = x.tank ? Math.min(100, (x.fuel / x.tank) * 100) : 0;
-      const needPct = (x.tank && x.avg && x.lapsToGo !== null) ? Math.min(100, (x.lapsToGo * x.avg / x.tank) * 100) : null;
-      const short = x.lapsOfFuel !== null && x.lapsOfFuel < 2;
-      body.innerHTML = hero +
-        `<div class="bar"><div class="fill" style="width:${fillPct}%"></div>${needPct !== null ? `<div class="need" style="left:${needPct}%"></div>` : ''}</div>
-        <div class="grid">
-          <div class="cell"><div class="k">Ø pro Runde</div><div class="v">${L(x.avg, 2)}</div></div>
-          <div class="cell ${short ? 'warn' : ''}"><div class="k">Reicht für</div><div class="v">${L(x.lapsOfFuel)} Rd.</div></div>
-          <div class="cell"><div class="k">Noch zu fahren</div><div class="v">${L(x.lapsToGo)} Rd.</div></div>
-          <div class="cell"><div class="k">Letzte Runde</div><div class="v">${L(x.last, 2)}</div></div>
-          <div class="cell"><div class="k">Max. Runde</div><div class="v">${L(x.max, 2)}</div></div>
-          <div class="cell"><div class="k">Box spätestens</div><div class="v">${x.pitLap ? 'Rd. ' + x.pitLap : '–'}</div></div>
-        </div>`;
+      const row = (k, label, v) => `<tr class="${k}"><td>${label}</td><td>${L(v.usage, 2)}</td><td>${L(v.laps)}</td><td>${v.refuel === null ? '–' : L(v.refuel)}</td><td>${v.finish === null ? '–' : L(v.finish)}</td></tr>`;
+      const hist = x.history.length
+        ? x.history.map((h) => `<div class="r"><span>${h.lap ?? ''}</span><span>${L(h.used, 2)}</span><span class="${h.diff > 0.05 ? 'up' : h.diff < -0.05 ? 'down' : ''}">${signed(h.diff)}</span></div>`).join('')
+        : '<div class="r"><span class="none">Nach der ersten vollen Runde erscheinen hier die Werte.</span></div>';
+
+      body.innerHTML = `<div class="body">
+        <div class="main">
+          <div class="top">${windowBox(x.window)}${refuel}
+            <div class="tank"><div class="bar"><i style="width:${pct}%"></i></div>
+              <div class="lbl"><span>E</span><b>${L(x.fuel)} L</b><span>${x.tank ? L(x.tank, 0) + ' L' : ''}</span></div></div>
+          </div>
+          <table>
+            <tr><th></th><th>Verbrauch</th><th>Runden</th><th>Tanken</th><th>Im Ziel</th></tr>
+            ${row('avg', 'Ø', r.avg)}${row('max', 'Max', r.max)}${row('min', 'Min', r.min)}
+          </table>
+          <div class="pitbar"><span>Box in</span><div class="segs" title="Runden bis der Tank leer ist">${segs}</div></div>
+        </div>
+        <div class="hist"><div class="h"><span>Rd.</span><span>Verbr.</span><span>Diff</span></div>${hist}</div>
+      </div>`;
     },
   });
 </script>

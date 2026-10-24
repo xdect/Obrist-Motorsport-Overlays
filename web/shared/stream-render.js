@@ -31,7 +31,16 @@ window.OMStream = {
         if (o.decorate) o.decorate(el, wid);
         canvas.appendChild(el);
       }
-      el.style.cssText = `position:absolute;left:${w.x}px;top:${w.y}px;width:${Math.round(type.w * w.scale)}px;height:${Math.round(type.h * w.scale)}px;`;
+      if (type.streamOnly) {
+        // Garagen-Cover: immer ganze Leinwand; in OBS zuoberst, im Editor zuunterst
+        const W = s.width, H = s.height;
+        el.classList.add('is-cover');
+        el.style.cssText = `position:absolute;left:0;top:0;width:${W}px;height:${H}px;z-index:${o.preview ? 0 : 1000};`;
+        el.firstChild.width = W; el.firstChild.height = H;
+        el.firstChild.style.transform = 'none';
+        continue;
+      }
+      el.style.cssText = `position:absolute;left:${w.x}px;top:${w.y}px;width:${Math.round(type.w * w.scale)}px;height:${Math.round(type.h * w.scale)}px;z-index:1;`;
       el.firstChild.style.transform = `scale(${w.scale})`;
     }
     for (const el of [...canvas.querySelectorAll('[data-widget]')]) {

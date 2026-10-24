@@ -3,6 +3,15 @@
 Jede Version bekommt einen Abschnitt `## x.y.z`. Die Zeilen darunter erscheinen in der App unter
 «Was ist neu», wenn ein Update verfügbar ist.
 
+## 1.4.1
+
+- Neuer Spritrechner: Boxenfenster (offen/zu), Ø-, Max- und Min-Verbrauch mit Runden, Tankmenge und Rest im Ziel, Verlauf der letzten Runden
+- Neu: Boxenplatz-Hilfe mit Begrenzer-Anzeige, Meter bis zur Box, Tempo zum Limit und Reifen (Temperatur und Abnutzung)
+- Neu: G-Kraft-Messgerät mit Spur, Hüllkurve und Höchstwerten
+- Neu: Flaggen-Anzeige und Digiflag (LED-Tafel wie an der Strecke)
+- Neu: Session-Timer (Restzeit oder Runden) und Datenblock für einen frei wählbaren Wert
+- Neu im Stream: Garagen-Cover – OM-Standardbild oder eigenes Bild, wenn du in der Garage bzw. nicht im Auto bist
+
 ## 1.4.0
 
 - Erkennt, ob du im Auto sitzt oder in der Box, Garage oder im Replay bist

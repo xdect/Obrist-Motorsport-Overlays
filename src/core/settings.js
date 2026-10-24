@@ -66,7 +66,7 @@ function normalize(input) {
   }
   for (const [id, l] of Object.entries(layouts)) {
     const overlays = {};
-    for (const t of Object.keys(D.TYPES)) {
+    for (const t of D.gameTypes()) {
       overlays[t] = { ...D.overlayDefaults(t, false), ...((l.overlays || {})[t] || {}) };
     }
     layouts[id] = { name: String(l.name || 'Layout').slice(0, 40), overlays };

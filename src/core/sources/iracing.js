@@ -18,7 +18,24 @@ const VARS = [
   'LapDeltaToSessionBestLap', 'LapDeltaToSessionBestLap_DD', 'LapDeltaToSessionBestLap_OK',
   'Throttle', 'Brake', 'Clutch', 'SteeringWheelAngle', 'SteeringWheelAngleMax', 'Gear', 'Speed', 'RPM',
   'BrakeABSactive', 'VelocityX', 'VelocityY', 'Yaw',
+  'EngineWarnings', 'LatAccel', 'LongAccel', 'AirTemp', 'TrackTempCrew', 'PlayerCarMyIncidentCount',
+  'SessionTimeTotal', 'SessionLapsTotal',
+  // Reifen: Temperatur innen/mitte/aussen und Verschleiss (iRacing misst beides beim Boxenstopp)
+  ...['LF', 'RF', 'LR', 'RR'].flatMap((t) => [`${t}tempCL`, `${t}tempCM`, `${t}tempCR`, `${t}wearL`, `${t}wearM`, `${t}wearR`]),
 ];
+
+// «4.26 km» / «2.65 mi» → Meter
+function lengthMeters(s) {
+  const v = parseFloat(s);
+  if (!Number.isFinite(v)) return 0;
+  return /mi/i.test(String(s)) ? v * 1609.344 : v * 1000;
+}
+// «80.00 kph» / «45.00 mph» → km/h
+function speedKph(s) {
+  const v = parseFloat(s);
+  if (!Number.isFinite(v)) return null;
+  return /mph/i.test(String(s)) ? v * 1.609344 : v;
+}
 
 function hexColor(v) {
   if (v === undefined || v === null || v === '') return '#c8a24c';
@@ -187,6 +204,9 @@ class IRacingSource {
         name: String(wi.TrackDisplayName || ''),
         config: String(wi.TrackConfigName || ''),
         length: String(wi.TrackLength || ''),
+        lengthM: lengthMeters(wi.TrackLength),
+        pitLimitKph: speedKph(wi.TrackPitSpeedLimit),
+        pitPct: Number.isFinite(Number(di.DriverPitTrkPct)) ? Number(di.DriverPitTrkPct) : null,
       },
       session: {
         type: String(cur.SessionType || ''),
@@ -194,6 +214,8 @@ class IRacingSource {
         lapsRemain: lapsRemainEx >= 32767 ? null : lapsRemainEx,
         time: num('SessionTime', 0),
         flags: num('SessionFlags', 0),
+        timeTotal: num('SessionTimeTotal', parseFloat(cur.SessionTime) || 0),
+        lapsTotal: (() => { const n = num('SessionLapsTotal', parseInt(cur.SessionLaps, 10)); return n > 0 && n < 32767 ? n : null; })(),
       },
       playerIdx,
       car: {
@@ -227,7 +249,16 @@ class IRacingSource {
         onTrack: bool('IsOnTrack'),
         inGarage: bool('IsInGarage'),
         replay: bool('IsReplayPlaying'),
+        engineWarnings: num('EngineWarnings'),
+        latAccel: num('LatAccel'),
+        longAccel: num('LongAccel'),
+        incidents: num('PlayerCarMyIncidentCount'),
+        tires: Object.fromEntries(['LF', 'RF', 'LR', 'RR'].map((t) => [t.toLowerCase(), {
+          temp: [num(`${t}tempCL`), num(`${t}tempCM`), num(`${t}tempCR`)],
+          wear: [num(`${t}wearL`, 1), num(`${t}wearM`, 1), num(`${t}wearR`, 1)],
+        }])),
       },
+      weather: { airTemp: num('AirTemp', NaN), trackTemp: num('TrackTempCrew', NaN) },
       drivers,
       cars,
     };

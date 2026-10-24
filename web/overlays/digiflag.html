@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Digiflag</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  html, body { height: 100%; }
+  .panel { height: 100%; padding: 10px; background: rgba(12, 12, 12, var(--panel-alpha)); border-radius: 4px; }
+  canvas { width: 100%; height: 100%; display: block; }
+  body.noflag .panel { opacity: 0; }
+  body.preview.noflag .panel { opacity: 1; }
+</style>
+</head>
+<body data-overlay="digiflag">
+<div class="panel"><canvas id="led"></canvas></div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/flags.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  // LED-Tafel wie an der Strecke: 26 × 26 Leuchtpunkte, Rand in Flaggenfarbe, Inhalt weiss/farbig
+  const N = 26;
+  const cv = document.getElementById('led');
+  const ctx = cv.getContext('2d');
+  const off = document.createElement('canvas');
+  const SS = 6; // Überabtastung beim Rastern von Text
+  off.width = off.height = N * SS;
+  const octx = off.getContext('2d');
+  const HOLD = 3000;
+  let shown = null, since = 0, greenSince = 0;
+
+  // Inhalt auf das Punkteraster bringen → Matrix 0..1 je Punkt
+  function rasterize(flag) {
+    octx.clearRect(0, 0, off.width, off.height);
+    octx.fillStyle = '#fff';
+    const inner = (N - 6) * SS, o = 3 * SS;
+    if (flag.text === 'checker') {
+      const c = inner / 6;
+      for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) if ((x + y) % 2 === 0) octx.fillRect(o + x * c, o + y * c, c, c);
+    } else if (flag.text === 'arrow') {
+      octx.beginPath();
+      octx.moveTo(o + inner * 0.05, o + inner * 0.5);
+      octx.lineTo(o + inner * 0.55, o + inner * 0.1);
+      octx.lineTo(o + inner * 0.55, o + inner * 0.32);
+      octx.lineTo(o + inner * 0.95, o + inner * 0.32);
+      octx.lineTo(o + inner * 0.95, o + inner * 0.68);
+      octx.lineTo(o + inner * 0.55, o + inner * 0.68);
+      octx.lineTo(o + inner * 0.55, o + inner * 0.9);
+      octx.closePath(); octx.fill();
+    } else {
+      // Zeichen einzeln setzen (mit einem Punkt Abstand), so gross wie möglich
+      const chars = [...flag.text];
+      const gap = SS * 1.6;
+      let size = inner * 1.1, widths, total;
+      octx.textAlign = 'left'; octx.textBaseline = 'middle';
+      do {
+        size -= SS / 2;
+        octx.font = `800 ${size}px "Bahnschrift", "Arial Narrow", sans-serif`;
+        widths = chars.map((c) => octx.measureText(c).width);
+        total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+      } while ((total > inner * 0.96 || size > inner * 0.9) && size > SS * 4);
+      octx.lineWidth = SS * 0.45; octx.strokeStyle = '#fff'; octx.lineJoin = 'round';
+      let x = o + (inner - total) / 2;
+      chars.forEach((c, i) => {
+        octx.strokeText(c, x, o + inner / 2 + SS * 0.5);
+        octx.fillText(c, x, o + inner / 2 + SS * 0.5);
+        x += widths[i] + gap;
+      });
+    }
+    const img = octx.getImageData(0, 0, off.width, off.height).data;
+    const m = [];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      let sum = 0;
+      for (let dy = 0; dy < SS; dy++) for (let dx = 0; dx < SS; dx++) sum += img[(((y * SS + dy) * off.width) + x * SS + dx) * 4 + 3];
+      m.push(sum / (SS * SS * 255) > 0.42 ? 1 : 0);
+    }
+    return m;
+  }
+
+  let cache = { id: null, m: null };
+  function draw(flag) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const p = Math.min(w, h) / N, r = p * 0.36;
+    if (flag && cache.id !== flag.id) cache = { id: flag.id, m: rasterize(flag) };
+    const blink = flag && (flag.id === 'yellow' || flag.id === 'caution') ? (Math.floor(Date.now() / 450) % 2 === 0) : true;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const border = x === 0 || y === 0 || x === N - 1 || y === N - 1 || x === 1 || y === 1 || x === N - 2 || y === N - 2;
+      let color = 'rgba(255,255,255,0.06)';
+      if (flag) {
+        if (border) color = blink ? flag.led : 'rgba(255,255,255,0.08)';
+        else if (cache.m[y * N + x]) color = flag.id === 'checkered' || flag.id === 'white' || flag.id === 'caution' || flag.id === 'yellow' ? '#F4F4F0' : flag.led;
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x * p + p / 2, y * p + p / 2, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  OM.connect({
+    onFrame(f, waiting) {
+      let flag = waiting ? null : f.flag;
+      const now = Date.now();
+      // Grün auf Wunsch weglassen; sonst nur kurz zeigen (Start/Restart)
+      if (flag && flag.id === 'green') {
+        if (!greenSince) greenSince = now;
+        if (OM.cfg().showGreen === false || now - greenSince > 6000) flag = null;
+      } else greenSince = 0;
+      if (!flag && shown && now - since < HOLD) flag = shown;
+      if (flag && (!shown || flag.id !== shown.id)) since = now;
+      shown = flag;
+      document.body.classList.toggle('noflag', !flag);
+      draw(flag);
+    },
+  });
+</script>
+</body>
+</html>

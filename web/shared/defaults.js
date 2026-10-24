@@ -13,7 +13,17 @@
     inputs:    { title: 'Inputs',    w: 430, h: 150 },
     delta:     { title: 'Delta',     w: 470, h: 96  },
     trackmap:  { title: 'Trackmap',  w: 330, h: 330 },
+    flags:     { title: 'Flaggen',   w: 380, h: 92 },
+    digiflag:  { title: 'Digiflag',  w: 220, h: 220 },
+    timer:     { title: 'Session-Timer', w: 320, h: 84 },
+    datablock: { title: 'Datenblock', w: 270, h: 64 },
+    pithelper: { title: 'Boxenplatz-Hilfe', w: 230, h: 340 },
+    gmeter:    { title: 'G-Kraft', w: 300, h: 300 },
+    // Nur im Stream: füllt die ganze Leinwand
+    cover:     { title: 'Garagen-Cover', w: 1920, h: 1080, streamOnly: true },
   };
+  // Für Fuel ist der Spritrechner breiter geworden
+  TYPES.fuel.w = 560; TYPES.fuel.h = 214;
 
   // Optionen je Overlay-Typ (gelten im Spiel und im Stream)
   // show: wann sichtbar – 'both' (im Auto und in der Box), 'car' (nur im Auto), 'box' (nur Box/Garage/Replay)
@@ -24,6 +34,20 @@
     inputs:    { show: 'both', traceSeconds: 6 },
     delta:     { show: 'both', reference: 'best' },                      // 'best' | 'session'
     trackmap:  { show: 'both', showNumbers: true, rotate: 0, mirror: false },
+    flags:     { show: 'both' },
+    digiflag:  { show: 'both', showGreen: true },
+    timer:     { show: 'both', mode: 'auto' },                           // 'auto' | 'time' | 'laps'
+    datablock: { show: 'both', metric: 'lapCurrent', showLabel: true },
+    pithelper: { show: 'car', onlyPitLane: true },
+    gmeter:    { show: 'both', maxG: 3 },
+    cover:     { trigger: 'garage', image: '' },                         // 'garage' | 'box'
+  };
+  // Werte für den Datenblock
+  const METRICS = {
+    lapCurrent: 'Aktuelle Runde', lapLast: 'Letzte Runde', lapBest: 'Beste Runde', deltaBest: 'Delta zur Bestzeit',
+    speed: 'Tempo', gear: 'Gang', rpm: 'Drehzahl', fuel: 'Sprit', position: 'Position', lap: 'Runde',
+    lapsRemain: 'Runden übrig', timeRemain: 'Restzeit', airTemp: 'Lufttemperatur', trackTemp: 'Streckentemperatur',
+    incidents: 'Incidents', clock: 'Uhrzeit',
   };
   const SHOW = { both: 'Im Auto und in der Box', car: 'Nur im Auto', box: 'Nur in der Box / Replay' };
 
@@ -90,6 +114,8 @@
   const GAME_POS = {
     relative: [60, 700], standings: [60, 60], fuel: [1900, 60],
     inputs: [1900, 1150], delta: [2330, 60], trackmap: [1900, 320],
+    flags: [1100, 200], digiflag: [1500, 200], timer: [1100, 60], datablock: [1100, 320],
+    pithelper: [700, 400], gmeter: [700, 760],
   };
 
   const SESSIONS = { practice: 'Training', qualify: 'Qualifying', race: 'Rennen' };
@@ -99,10 +125,12 @@
     return Object.assign({ enabled: !!enabled, scale: 1, opacity: 0.92, x: p[0], y: p[1] }, OPTIONS[type]);
   }
 
+  const gameTypes = () => Object.keys(TYPES).filter((t) => !TYPES[t].streamOnly);
+
   function gameLayout(name, enabledTypes) {
     const on = enabledTypes || ['relative', 'fuel', 'delta'];
     const overlays = {};
-    for (const t of Object.keys(TYPES)) overlays[t] = overlayDefaults(t, on.includes(t));
+    for (const t of gameTypes()) overlays[t] = overlayDefaults(t, on.includes(t));
     return { name: name || 'Neues Layout', overlays };
   }
 
@@ -132,6 +160,6 @@
     return (prefix || 'x') + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
   }
 
-  return { TYPES, OPTIONS, GAME_POS, SESSIONS, SHOW, showFor, THEME, PRESETS, normalizeTheme, themeVars, applyTheme, onColor,
+  return { TYPES, OPTIONS, METRICS, GAME_POS, gameTypes, SESSIONS, SHOW, showFor, THEME, PRESETS, normalizeTheme, themeVars, applyTheme, onColor,
     overlayDefaults, gameLayout, widget, streamLayout, sessionCategory, newId };
 });

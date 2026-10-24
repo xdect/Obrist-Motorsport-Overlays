@@ -12,6 +12,13 @@
     inputs:    'Gas, Bremse, Kupplung und Lenkung als Verlauf, dazu Gang und Tempo.',
     delta:     'Delta zur Bestzeit mit Rundenprognose.',
     trackmap:  'Alle Autos live auf der Strecke. Die Karte wird beim ersten Mal aus deiner Fahrt aufgezeichnet.',
+    flags:     'Aktuelle Flagge mit Meldung, zum Beispiel Gelb, Blau, Safety Car oder letzte Runde.',
+    digiflag:  'Grosse LED-Flaggentafel wie an der Strecke. Erscheint nur, wenn eine Flagge aktiv ist.',
+    timer:     'Verbleibende Zeit oder Runden der Session mit Fortschrittsbalken.',
+    datablock: 'Ein einzelner Wert deiner Wahl, zum Beispiel Rundenzeit, Tempo oder Streckentemperatur.',
+    pithelper: 'Boxengasse: Begrenzer, Tempo zum Limit, Distanz zum Boxenplatz und Reifenwerte.',
+    gmeter:    'Längs- und Querkräfte mit Traktionskreis deiner Session.',
+    cover:     'Standbild über dem ganzen Stream, solange du in der Garage bist.',
   };
   const STATUS = {
     live: 'iRacing verbunden, Overlays aktiv',
@@ -46,12 +53,13 @@
   }
 
   // ---------- Optionen je Overlay-Typ (für Karten und Stream-Inspektor) ----------
-  function showHtml(o) {
+  function showHtml(o, type) {
+    if (type === 'cover') return '';
     return `<div class="opt full"><span>Sichtbar</span><select data-k="show">${Object.entries(D.SHOW).map(([k, l]) =>
       `<option value="${k}" ${(o.show || 'both') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
   }
   function optsHtml(type, o) {
-    return showHtml(o) + typeOptsHtml(type, o);
+    return showHtml(o, type) + typeOptsHtml(type, o);
   }
   function typeOptsHtml(type, o) {
     switch (type) {
@@ -69,6 +77,21 @@
         <div class="opt full"><span>Verlauf <output>${o.traceSeconds}</output> s</span><input type="range" min="2" max="15" value="${o.traceSeconds}" data-k="traceSeconds"></div>`;
       case 'delta': return `
         <div class="opt full"><span>Vergleich mit</span><select data-k="reference"><option value="best" ${o.reference === 'best' ? 'selected' : ''}>Meiner Bestzeit</option><option value="session" ${o.reference === 'session' ? 'selected' : ''}>Session-Bestzeit</option></select></div>`;
+      case 'digiflag': return `
+        <div class="opt full"><label class="chk"><input type="checkbox" data-k="showGreen" ${o.showGreen !== false ? 'checked' : ''}> Grüne Flagge beim Start zeigen</label></div>`;
+      case 'timer': return `
+        <div class="opt full"><span>Anzeigen</span><select data-k="mode">${[['auto', 'Automatisch (Zeit oder Runden)'], ['time', 'Restzeit'], ['laps', 'Runden']].map(([k, l]) => `<option value="${k}" ${o.mode === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+      case 'datablock': return `
+        <div class="opt full"><span>Wert</span><select data-k="metric">${Object.entries(D.METRICS).map(([k, l]) => `<option value="${k}" ${o.metric === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="opt full"><label class="chk"><input type="checkbox" data-k="showLabel" ${o.showLabel !== false ? 'checked' : ''}> Bezeichnung zeigen</label></div>`;
+      case 'pithelper': return `
+        <div class="opt full"><label class="chk"><input type="checkbox" data-k="onlyPitLane" ${o.onlyPitLane !== false ? 'checked' : ''}> Nur in der Boxengasse zeigen</label></div>`;
+      case 'gmeter': return `
+        <div class="opt full"><span>Skala bis <output>${o.maxG}</output> G</span><input type="range" min="1" max="6" step="0.5" value="${o.maxG}" data-k="maxG"></div>`;
+      case 'cover': return `
+        <div class="opt full"><span>Zeigen</span><select data-k="trigger"><option value="garage" ${o.trigger !== 'box' ? 'selected' : ''}>Nur in der Garage</option><option value="box" ${o.trigger === 'box' ? 'selected' : ''}>Immer, wenn ich nicht im Auto sitze</option></select></div>
+        <div class="opt full"><span>Bild</span><span class="hint">${o.image ? 'Eigenes Bild' : 'OM-Standardbild (Akzentfarbe und #-Nummer)'}</span>
+          <div class="row-acts" style="margin-top:4px"><button class="btn" data-act="coverUpload">Eigenes Bild wählen …</button>${o.image ? '<button class="btn" data-act="coverReset">Standardbild</button>' : ''}</div></div>`;
       case 'trackmap': return `
         <div class="opt"><span>Drehen <output>${o.rotate}</output>°</span><input type="range" min="0" max="345" step="15" value="${o.rotate}" data-k="rotate"></div>
         <div class="opt"><label class="chk"><input type="checkbox" data-k="mirror" ${o.mirror ? 'checked' : ''}> Spiegeln</label><label class="chk"><input type="checkbox" data-k="showNumbers" ${o.showNumbers !== false ? 'checked' : ''}> Startnummern</label></div>`;
@@ -298,6 +321,9 @@
     $('#stageSize').textContent = `${s.width} × ${s.height}`;
     if (ui.widget && !s.widgets[ui.widget]) ui.widget = null;
     OMStream.render($('#canvas'), S, ui.stream, { preview: true, decorate });
+    const ids = Object.keys(s.widgets);
+    $('#widgetList').innerHTML = ids.length ? '<span>Auf der Leinwand:</span>' + ids.map((id) =>
+      `<button class="chip" data-pick="${id}" aria-pressed="${id === ui.widget}">${esc(D.TYPES[s.widgets[id].type].title)}</button>`).join('') : '';
     $$('#canvas .om-widget').forEach((el) => el.classList.toggle('sel', el.dataset.widget === ui.widget));
     fitStage();
     renderInspector();
@@ -351,9 +377,14 @@
     if (!b) return;
     const s = S.streams[ui.stream];
     const t = D.TYPES[b.dataset.add];
+    if (t.streamOnly) {
+      const existing = Object.keys(s.widgets).find((k) => s.widgets[k].type === b.dataset.add);
+      if (existing) { select(existing); toast('Dieses Stream-Overlay hat schon ein Garagen-Cover.'); return; }
+    }
     const n = Object.keys(s.widgets).length % 8;
     const id = D.newId('w');
-    const w = D.widget(b.dataset.add, Math.round((s.width - t.w) / 2) + n * 30, Math.round((s.height - t.h) / 2) + n * 30);
+    const w = t.streamOnly ? D.widget(b.dataset.add, 0, 0)
+      : D.widget(b.dataset.add, Math.round((s.width - t.w) / 2) + n * 30, Math.round((s.height - t.h) / 2) + n * 30);
     ui.widget = id;
     patch({ streams: { [ui.stream]: { widgets: { [id]: w } } } });
   });
@@ -361,6 +392,7 @@
   // Ziehen, Auswählen, Tastatur
   function select(wid) {
     ui.widget = wid;
+    $$('#widgetList [data-pick]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pick === wid)));
     $$('#canvas .om-widget').forEach((el) => el.classList.toggle('sel', el.dataset.widget === wid));
     renderInspector();
   }
@@ -472,7 +504,7 @@
     const w = s && ui.widget && s.widgets[ui.widget];
     const key = w ? `${ui.stream}/${ui.widget}` : `none/${ui.stream}/${Object.keys(s ? s.widgets : {}).length}`;
     if (key === renderedInspector && box.innerHTML) {
-      if (w && !box.contains(document.activeElement)) { $('#insX').value = w.x; $('#insY').value = w.y; }
+      if (w && $('#insX') && !box.contains(document.activeElement)) { $('#insX').value = w.x; $('#insY').value = w.y; }
       return;
     }
     renderedInspector = key;
@@ -484,6 +516,17 @@
       return;
     }
     const t = D.TYPES[w.type];
+    if (t.streamOnly) {
+      box.innerHTML = `
+        <h3>${t.title}</h3>
+        <p class="hint" style="margin-bottom:10px">Füllt die ganze Leinwand und liegt in OBS über allen anderen Elementen. Im Editor ist es blass im Hintergrund.</p>
+        <div class="opts">
+          <div class="opt full"><span>Deckkraft <output>${Math.round(w.opacity * 100)}</output> %</span><input type="range" min="0.1" max="1" step="0.02" value="${w.opacity}" data-k="opacity"></div>
+          ${optsHtml(w.type, w.options)}
+        </div>
+        <div class="row-acts"><button class="btn" data-act="removeWidget">Entfernen</button></div>`;
+      return;
+    }
     box.innerHTML = `
       <h3>${t.title}</h3>
       <div class="pos">
@@ -525,9 +568,33 @@
     const max = k === 'x' ? s.width - t.w * w.scale : s.height - t.h * w.scale;
     e.target.value = Math.round(Math.min(Math.max(Number(e.target.value) || 0, 0), Math.max(0, max)));
   });
+  // Eigenes Cover-Bild hochladen
+  const coverFile = document.createElement('input');
+  coverFile.type = 'file';
+  coverFile.accept = 'image/png,image/jpeg,image/webp,image/gif';
+  coverFile.addEventListener('change', async () => {
+    const f = coverFile.files[0];
+    coverFile.value = '';
+    if (!f || !ui.widget) return;
+    try {
+      const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': f.type }, body: f });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      renderedInspector = '';
+      patch({ streams: { [ui.stream]: { widgets: { [ui.widget]: { options: { image: j.url } } } } } });
+      toast('Bild übernommen');
+    } catch (e) { toast('Bild konnte nicht geladen werden: ' + e.message); }
+  });
   $('#inspector').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="coverUpload"]')) { coverFile.click(); return; }
+    if (e.target.closest('[data-act="coverReset"]') && ui.widget) {
+      renderedInspector = '';
+      patch({ streams: { [ui.stream]: { widgets: { [ui.widget]: { options: { image: '' } } } } } });
+      return;
+    }
     if (e.target.closest('[data-act="removeWidget"]') && ui.widget) removeWidget(ui.widget);
   });
+  $('#widgetList').addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b) select(b.dataset.pick); });
   // Klick ins Leere hebt die Auswahl auf
   $('#stage').addEventListener('pointerdown', (e) => { if (!e.target.closest('.om-widget')) select(null); });
 

@@ -57,6 +57,7 @@ function syncLayout() {
 
 const server = new Server({
   webRoot,
+  mediaDir: path.join(dataDir, 'media'),
   port: Number(process.env.OM_PORT) || settings.get().port || 7913,
   getSettings: () => settings.get(),
   onSettings: (patch) => settings.update(patch),
@@ -97,6 +98,7 @@ async function loop() {
       raw = demo.read();
       raw.session.type = DEMO_TYPES[s.demoSession] || 'Race';
       raw.car.onTrack = s.demoCar !== 'box';
+      raw.car.inGarage = s.demoCar === 'box'; // Demo: «in der Box» = Garage (für das Garagen-Cover)
       recorder.setStatic(raw.trackPath);
     } else {
       demo = null;
@@ -110,6 +112,7 @@ async function loop() {
     const frame = engine.frame(raw, s, { recording: recorder.recording, progress: recorder.progress });
     updateCarState(raw, now);
     frame.inCar = inCar;
+    frame.inGarage = raw ? !!raw.car.inGarage : null;
     if (frame.category) category = frame.category;
     syncLayout();
     if (frame.status !== status) { status = frame.status; toParent({ type: 'status', status }); }

@@ -90,6 +90,14 @@ ausgeblendete Elemente abgedunkelt.
 - **Farben:** Reiter «Farben» – Vorlagen (OM Gold, Rennrot, Papaya, Petrol, Eisblau, Violett,
   Silber, Hell) oder eigene Farben für Akzent, Hintergrund, Text, schneller und langsamer.
 
+## Weitere Elemente (ab 1.4.1)
+
+- **Spritrechner:** Boxenfenster, Verbrauch Ø/Max/Min, Tankmenge, Rest im Ziel, letzte Runden.
+- **Boxenplatz-Hilfe:** Begrenzer, Meter bis zur Box, Tempo zum Limit, Reifen. Standardmässig nur in der Boxengasse.
+- **G-Kraft-Messgerät**, **Flaggen**, **Digiflag**, **Session-Timer**, **Datenblock** (Wert wählbar).
+- **Garagen-Cover (nur Stream):** deckt die ganze Szene ab, wenn du in der Garage bist
+  (oder wahlweise immer, wenn du nicht im Auto sitzt). OM-Standardbild oder eigenes Bild hochladen.
+
 ## Updates
 
 OM Overlays sucht beim Start und danach alle 6 Stunden auf GitHub

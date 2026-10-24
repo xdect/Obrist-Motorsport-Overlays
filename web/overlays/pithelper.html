@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>OM Boxenplatz-Hilfe</title>
+<link rel="stylesheet" href="/shared/om.css">
+<style>
+  .panel { transition: opacity .25s ease; }
+  .lim { padding: 9px 10px; text-align: center; font-family: var(--font-wide); font-size: 19px; font-weight: 700; letter-spacing: .03em;
+    background: var(--loss); color: #fff; }
+  .lim.on { background: var(--gain); color: #0F1A12; }
+  .prow { display: grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 6px 12px; border-top: 1px solid var(--rule); }
+  .prow .k { font-size: 12.5px; color: var(--mist); }
+  .prow .v { font-family: var(--font-wide); font-size: 22px; font-weight: 700; }
+  .prow .v small { font-size: 12px; color: var(--mist); font-weight: 500; margin-left: 3px; }
+  .v.over { color: var(--loss); }
+  .v.under { color: var(--gain); }
+  .near .v { color: var(--gold); }
+  .prow .k { white-space: nowrap; }
+  .tires { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 10px 12px 12px; border-top: 1px solid var(--rule); }
+  .tire { display: grid; justify-items: center; gap: 3px; font-size: 11px; }
+  .tire .w, .tire .t { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; text-align: center; color: var(--mist); }
+  .tire .t span { font-weight: 600; }
+  .tire .body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; width: 34px; height: 48px; padding: 3px; border-radius: 7px; background: #0A0A0B; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .tire .body i { border-radius: 3px; background: var(--graphite); }
+  body.offlane .panel { opacity: 0; }
+  body.preview.offlane .panel { opacity: 0.45; }
+</style>
+</head>
+<body data-overlay="pithelper">
+<div class="panel">
+  <div class="lim" id="lim">BEGRENZER AUS</div>
+  <div class="prow" id="distRow"><span class="k">bis zur Box</span><span class="v" id="dist">–</span></div>
+  <div class="prow"><span class="k" id="spdK">zum Limit</span><span class="v" id="spd">–</span></div>
+  <div class="tires" id="tires"></div>
+</div>
+<script src="/shared/defaults.js"></script>
+<script src="/shared/link.js"></script>
+<script src="/shared/om.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  // Reifentemperatur → Farbe: kalt blau, Arbeitsfenster grün, heiss rot
+  function tempColor(c) {
+    if (!(c > 0)) return 'var(--graphite)';
+    if (c < 60) return '#3D7BFF';
+    if (c < 75) return '#7FB8FF';
+    if (c <= 100) return 'var(--gain)';
+    if (c <= 110) return 'var(--gold)';
+    return 'var(--loss)';
+  }
+  const pct = (w) => (w > 0 ? Math.round(w * 100) + '%' : '–');
+  function tireHtml(t) {
+    if (!t) return '<div class="tire"></div>';
+    return `<div class="tire">
+      <div class="w">${t.wear.map((w) => `<span>${pct(w)}</span>`).join('')}</div>
+      <div class="body">${t.temp.map((c) => `<i style="background:${tempColor(c)}"></i>`).join('')}</div>
+      <div class="t">${t.temp.map((c) => `<span>${c > 0 ? Math.round(c) + '°' : '–'}</span>`).join('')}</div>
+    </div>`;
+  }
+
+  OM.connect({
+    onFrame(f, waiting) {
+      const c = OM.cfg();
+      const p = f.pit;
+      // Nur in der Boxengasse (oder mit aktivem Begrenzer) zeigen, wenn so eingestellt
+      const inLane = p && (p.onPit || p.limiter);
+      document.body.classList.toggle('offlane', waiting || (c.onlyPitLane !== false && !inLane));
+      if (waiting || !p) return;
+      $('lim').textContent = p.limiter ? 'BEGRENZER AN' : 'BEGRENZER AUS';
+      $('lim').className = 'lim' + (p.limiter ? ' on' : '');
+      const d = p.distM;
+      $('dist').innerHTML = d !== null && d < 1500 ? `${Math.round(d)}<small>m</small>` : '–';
+      $('distRow').classList.toggle('near', d !== null && d < 60);
+      if (p.deltaKph !== null) {
+        $('spd').innerHTML = `${p.deltaKph > 0 ? '+' : '−'}${Math.abs(p.deltaKph).toFixed(1)}<small>km/h</small>`;
+        $('spd').className = 'v ' + (p.deltaKph > 0.5 ? 'over' : 'under');
+        $('spdK').textContent = `zum Limit ${Math.round(p.limitKph)}`;
+      } else {
+        $('spd').innerHTML = `${Math.round(p.speedKph)}<small>km/h</small>`;
+        $('spd').className = 'v';
+      }
+      const t = p.tires || {};
+      $('tires').innerHTML = tireHtml(t.lf) + tireHtml(t.rf) + tireHtml(t.lr) + tireHtml(t.rr);
+    },
+  });
+</script>
+</body>
+</html>

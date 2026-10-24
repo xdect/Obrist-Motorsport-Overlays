@@ -162,6 +162,9 @@
   .om-widget:hover { outline: calc(1px * var(--inv, 1)) dashed var(--gold-pale); }
   .om-widget.sel { outline: calc(2px * var(--inv, 1)) solid var(--gold); }
   .om-widget.dragging { cursor: grabbing; }
+  .om-widget.is-cover { opacity: .28; pointer-events: none; }
+  .om-widget.is-cover.sel { opacity: .6; }
+  #widgetList .chip { padding: 5px 10px; font-size: 13.5px; }
   .om-widget:focus-visible { outline: 3px solid var(--gold); }
   .adders { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: 14px; color: var(--mist); }
   .inspector .opts { padding: 0; }
@@ -288,6 +291,7 @@
       <div class="editor">
         <div>
           <div class="stage-wrap"><div class="stage" id="stage"><div class="canvas" id="canvas"></div><span class="size" id="stageSize"></span></div></div>
+          <div class="adders" id="widgetList"></div>
           <div class="adders" id="adders"><span>Element hinzufügen:</span></div>
           <p class="hint" id="demoHint" style="margin-top:10px" hidden>Ohne iRacing zeigen die Elemente nur einen Platzhalter. Für eine Vorschau mit Daten oben auf <b>Demo</b> wechseln.</p>
         </div>

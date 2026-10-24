@@ -7,6 +7,9 @@
 // unterschiedlichen Einstellungen laufen. Die Engine liefert dafür jeweils das Maximum.
 const { sessionCategory } = require('../../web/shared/defaults');
 const { compute: computeFuel } = require('../../web/shared/fuel-calc');
+const { decode: decodeFlag } = require('../../web/shared/flags');
+const G = 9.81;
+const PIT_LIMITER = 0x10; // EngineWarnings: Boxengassen-Begrenzer aktiv
 
 const REL_MAX = 8; // so viele Autos vor/hinter dir liefert die Engine; die Anzeige schneidet zu
 
@@ -21,6 +24,7 @@ class FuelTracker {
   constructor() { this.reset(); }
   reset() {
     this.laps = [];        // Verbrauch pro Runde (Liter)
+    this.lapNos = [];      // zugehörige Rundennummern
     this.lapTimes = [];    // gültige Rundenzeiten
     this.lastLapCompleted = null;
     this.fuelAtLapStart = null;
@@ -43,7 +47,8 @@ class FuelTracker {
       const used = this.fuelAtLapStart - car.fuel;
       if (!this.pitThisLap && used > 0.05 && car.lapCompleted === this.lastLapCompleted + 1) {
         this.laps.push(used);
-        if (this.laps.length > 30) this.laps.shift();
+        this.lapNos.push(car.lapCompleted);
+        if (this.laps.length > 30) { this.laps.shift(); this.lapNos.shift(); }
         if (car.lapLast > 0) { this.lapTimes.push(car.lapLast); if (this.lapTimes.length > 30) this.lapTimes.shift(); }
       }
       this.lastLapCompleted = car.lapCompleted;
@@ -59,7 +64,7 @@ class FuelTracker {
   raw(snapshot, fallbackLap) {
     const car = snapshot.car, s = snapshot.session;
     return {
-      fuel: car.fuel, tank: car.fuelMax, laps: this.laps.slice(), lapTimes: this.lapTimes.slice(),
+      fuel: car.fuel, tank: car.fuelMax, laps: this.laps.slice(), lapNos: this.lapNos.slice(), lapTimes: this.lapTimes.slice(),
       lapsRemain: s.lapsRemain, timeRemain: s.timeRemain, lapDistPct: car.lapDistPct,
       lapCompleted: car.lapCompleted, lapBest: car.lapBest, fallbackLap,
     };
@@ -108,6 +113,14 @@ class Engine {
         speed: raw.car.speed, rpm: raw.car.rpm, abs: raw.car.abs,
       },
       delta: this.delta(raw.car),
+      flag: decodeFlag(raw.session.flags),
+      pit: this.pit(raw),
+      g: { lat: (raw.car.latAccel || 0) / G, long: (raw.car.longAccel || 0) / G },
+      timer: {
+        timeRemain: raw.session.timeRemain, timeTotal: raw.session.timeTotal || 0,
+        lapsRemain: raw.session.lapsRemain, lapsTotal: raw.session.lapsTotal || null, lap: raw.car.lap,
+      },
+      data: this.data(raw, me),
       map: {
         cars: raw.cars.filter((c) => c.inWorld).map((c) => {
           const d = drivers.get(c.idx) || {};
@@ -201,6 +214,39 @@ class Engine {
         onPit: c.onPit, lap: c.lap,
       };
     });
+  }
+
+  // Boxenplatz-Hilfe: Begrenzer, Tempo gegenüber Limit, Distanz zum eigenen Boxenplatz, Reifen
+  pit(raw) {
+    const car = raw.car, t = raw.track || {};
+    const speedKph = (car.speed || 0) * 3.6;
+    let distM = null;
+    if (t.pitPct !== null && t.pitPct !== undefined && t.lengthM > 0 && car.lapDistPct >= 0) {
+      distM = (((t.pitPct - car.lapDistPct) % 1) + 1) % 1 * t.lengthM; // Strecke bis zum Boxenplatz (vorwärts)
+    }
+    return {
+      limiter: !!((car.engineWarnings || 0) & PIT_LIMITER),
+      onPit: !!car.onPit,
+      limitKph: t.pitLimitKph || null,
+      speedKph,
+      deltaKph: t.pitLimitKph ? speedKph - t.pitLimitKph : null,
+      distM,
+      tires: car.tires || null,
+    };
+  }
+
+  // Werte für den Datenblock
+  data(raw, me) {
+    const c = raw.car, s = raw.session, w = raw.weather || {};
+    return {
+      lapCurrent: c.lapCurrent, lapLast: c.lapLast, lapBest: c.lapBest,
+      deltaBest: c.deltaBestOk ? c.deltaBest : null,
+      speed: (c.speed || 0) * 3.6, gear: c.gear, rpm: c.rpm, fuel: c.fuel,
+      position: me ? me.position : 0, classPosition: me ? me.classPosition : 0, cars: raw.cars.length,
+      lap: c.lap, lapsRemain: s.lapsRemain, timeRemain: s.timeRemain,
+      airTemp: Number.isFinite(w.airTemp) ? w.airTemp : null, trackTemp: Number.isFinite(w.trackTemp) ? w.trackTemp : null,
+      incidents: c.incidents ?? null,
+    };
   }
 
   delta(car) {
